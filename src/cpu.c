@@ -238,7 +238,8 @@ static void ShaInstrHandler(Cpu *cpu, AddressingMode addr_mode, const uint8_t re
         addr_high = CpuRead8((zp_addr + 1) & PAGE_MASK);
     }
 
-    const uint8_t data = reg_value & (addr_high + 1);
+    const int64_t cycles = cpu->cycles + 1;
+    uint8_t data = reg_value & (addr_high + 1);
     uint16_t addr_low_final = addr_low + (addr_mode == AbsoluteX ? cpu->x : cpu->y);
     const bool page_cross = addr_low_final > 255;
 
@@ -247,8 +248,16 @@ static void ShaInstrHandler(Cpu *cpu, AddressingMode addr_mode, const uint8_t re
 
     uint16_t final_addr = (uint16_t)addr_high << 8 | (uint8_t)(addr_low_final);
 
+    // Dummy read
     CpuRead8(final_addr);
     CpuPollIRQ(cpu);
+
+    // Check if DMA occured on the dummy read.
+    // If so, the elapsed cycles will be more than the one cycle from the dummy read.
+    // So the data written at the address will ignore the (AND (addr_high + 1))
+    if (cpu->cycles > cycles)
+        data = reg_value;
+
     CpuWrite8(final_addr, data);
 }
 
