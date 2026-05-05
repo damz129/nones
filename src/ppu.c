@@ -886,9 +886,18 @@ static void PpuFetchSprite(Ppu *ppu, int sprite_num)
     }
 }
 
-void PpuUpdateRenderingState(Ppu *ppu)
+void PpuScheduleRendererUpdate(Ppu *ppu)
 {
+    ppu->renderer_update = true;
+}
+
+static void PpuUpdateRenderingState(Ppu *ppu)
+{
+    if (!ppu->renderer_update)
+        return;
+
     ppu->rendering = ppu->mask.bg_rendering | ppu->mask.sprites_rendering;
+    ppu->renderer_update = false;
 }
 
 static void PpuCycleUpdate(Ppu *ppu)

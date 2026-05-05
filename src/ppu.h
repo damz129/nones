@@ -311,6 +311,7 @@ typedef struct
     bool prev_sprite0_loaded;
     bool sprite_in_range;
 
+    bool renderer_update;
     bool rendering;
     bool clear_vblank;
     bool frame_finished;
@@ -340,7 +341,7 @@ typedef struct
 void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, uint32_t buffer_size);
 void PPU_Tick(Ppu *ppu);
 void PPU_Reset(Ppu *ppu);
-void PpuUpdateRenderingState(Ppu *ppu);
+void PpuScheduleRendererUpdate(Ppu *ppu);
 uint8_t ReadPPURegister(Ppu *ppu, const uint16_t addr);
 void WritePPURegister(Ppu *ppu, const uint16_t addr, const uint8_t data);
 void PpuSetArrangement(NameTableArrangement mode, int page);

@@ -491,12 +491,7 @@ static uint8_t SystemReadNmiPin(System *system)
 static void SystemPollNmi(System *system)
 {
     uint8_t current_nmi_pin = SystemReadNmiPin(system);
-    if (~current_nmi_pin & system->cpu->nmi_pin)
-    {
-        system->cpu->nmi_pending = true;
-        //printf("NMI falling edge at frame: %ld ppu cycle: %d scanline:%d\n",
-        //        system_ptr->ppu->frames, system_ptr->ppu->cycle_counter, system_ptr->ppu->scanline);
-    }
+    system->cpu->nmi_pending |= (~current_nmi_pin & system->cpu->nmi_pin);
     system->cpu->nmi_pin = current_nmi_pin;
 }
 
@@ -508,6 +503,7 @@ void SystemTick(void)
     SystemPollNmi(system_ptr);
     PPU_Tick(system_ptr->ppu);
     PPU_Tick(system_ptr->ppu);
+    PpuScheduleRendererUpdate(system_ptr->ppu);
 }
 
 void SystemAddCpuCycles(uint32_t cycles)
