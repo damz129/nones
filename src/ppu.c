@@ -23,7 +23,7 @@ static uint8_t vram[0x800];
 // Pointers to handle mirroring
 static uint8_t *nametables[4];
 
-static Color sys_palette[64] =
+static const Color sys_palette[64] =
 {
     {0x66, 0x66, 0x66},
     {0x00, 0x2A, 0x88}, 
@@ -87,35 +87,59 @@ static Color sys_palette[64] =
     {0x9D, 0xE8, 0xC5},
     {0xA4, 0xE2, 0xEA}, 
     {0xA8, 0xA8, 0xA8},
-    {0x00, 0x00, 0x00}, 
+    {0x00, 0x00, 0x00},
     {0x00, 0x00, 0x00}
 };
 
-static void PpuApplyColorEmphasis(Ppu *ppu, Color *color, uint8_t color_index)
+static inline void PpuApplyColorEmphasis(Ppu *ppu, Color *color, uint8_t color_index)
 {
     if (color_index == 0xE || color_index == 0xF)
         return;
 
-    if (ppu->mask.emphasize_red)
+    switch (ppu->mask.raw >> 5)
     {
-        color->b *= COLOR_ATTENUATION;
-        color->g *= COLOR_ATTENUATION;
-    }
-
-    if (ppu->mask.emphasize_green)
-    {
-        color->b *= COLOR_ATTENUATION;
-        color->r *= COLOR_ATTENUATION;
-    }
-
-    if (ppu->mask.emphasize_blue)
-    {
-        color->g *= COLOR_ATTENUATION;
-        color->r *= COLOR_ATTENUATION;
+        case 0x1:
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x2:
+            color->b *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x3:
+            color->b *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x4:
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x5:
+            color->b *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x6:
+            color->b *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x7:
+            color->b *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->b *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            color->g *= COLOR_ATTENUATION;
+            color->r *= COLOR_ATTENUATION;
+            break;
     }
 }
 
-static Color GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+static inline Color GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
 {
     // Compute palette memory address
     const uint16_t palette_addr = 0x3F00 | (palette_index << 2) | pixel;
@@ -143,12 +167,14 @@ static Color GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pix
     }
 
     Color color = sys_palette[color_index & 0x3F];
-    PpuApplyColorEmphasis(ppu, &color, color_index);
+
+    if (ppu->mask.raw >> 5)
+        PpuApplyColorEmphasis(ppu, &color, color_index);
 
     return color;
 }
 
-static Color GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+static inline Color GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
 {
     const uint16_t palette_addr = 0x10 | (palette_index << 2) | pixel;
     uint16_t color_index = ppu->palettes[palette_addr];
@@ -159,12 +185,14 @@ static Color GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t
     }
 
     Color color = sys_palette[color_index & 0x3F];
-    PpuApplyColorEmphasis(ppu, &color, color_index);
+
+    if (ppu->mask.raw >> 5)
+        PpuApplyColorEmphasis(ppu, &color, color_index);
 
     return color;
 }
 
-static void PpuUpdateBus(Ppu *ppu, const uint16_t addr)
+static inline void PpuUpdateBus(Ppu *ppu, const uint16_t addr)
 {
     uint8_t prev_a12 = (ppu->bus_addr >> 12) & 1;
     uint8_t new_a12 = (addr >> 12) & 1;
@@ -186,13 +214,13 @@ static void PpuUpdateBus(Ppu *ppu, const uint16_t addr)
     ppu->bus_addr = addr;
 }
 
-static uint8_t PpuReadChr(Ppu *ppu, const uint16_t addr)
+static inline uint8_t PpuReadChr(Ppu *ppu, const uint16_t addr)
 {
     PpuUpdateBus(ppu, addr);
     return PpuBusReadChrRom(addr);
 }
 
-static void PpuCopyTtoV(Ppu *ppu)
+static inline void PpuCopyTtoV(Ppu *ppu)
 {
     const uint8_t prev_a12 = ppu->v.raw_bits.bit12;
     // Transfer t to v
@@ -204,7 +232,7 @@ static void PpuCopyTtoV(Ppu *ppu)
     ppu->copy_t = false;
 }
 
-void PPU_WriteAddrReg(Ppu *ppu, const uint8_t value)
+void PpuWriteAddrReg(Ppu *ppu, const uint8_t value)
 {
     if (!ppu->w)
     {
@@ -221,17 +249,17 @@ void PPU_WriteAddrReg(Ppu *ppu, const uint8_t value)
     ppu->w = !ppu->w;
 }
 
-static uint16_t PpuGetAttribAddr(Ppu *ppu)
+static inline uint16_t PpuGetAttribAddr(Ppu *ppu)
 {
     return 0x23C0 | (ppu->v.raw & 0x0C00) | ((ppu->v.raw >> 4) & 0x38) | ((ppu->v.raw >> 2) & 0x07);
 }
 
-static uint16_t PpuGetNTAddr(Ppu *ppu)
+static inline uint16_t PpuGetNTAddr(Ppu *ppu)
 {
     return 0x2000 | (ppu->v.raw & 0x0FFF);
 }
 
-static void PpuNametableWrite(Ppu *ppu, uint16_t addr, uint8_t data)
+static inline void PpuNametableWrite(Ppu *ppu, uint16_t addr, uint8_t data)
 {
     nametables[ppu->v.scrolling.name_table_sel][addr & 0x3FF] = data;
 }
@@ -242,7 +270,7 @@ uint8_t PpuNametableRead(Ppu *ppu, uint16_t addr)
 }
 
 // Horizontal scrolling
-static void PpuIncrementScrollX(Ppu *ppu)
+static inline void PpuIncrementScrollX(Ppu *ppu)
 {
     if (ppu->v.scrolling.coarse_x == 31)
     {
@@ -257,7 +285,7 @@ static void PpuIncrementScrollX(Ppu *ppu)
 }
 
 // Vertical Scroll
-static void PpuIncrementScrollY(Ppu *ppu)
+static inline void PpuIncrementScrollY(Ppu *ppu)
 {
     if (ppu->v.scrolling.fine_y < 7)
         ++ppu->v.scrolling.fine_y;
@@ -283,7 +311,7 @@ static void PpuIncrementScrollY(Ppu *ppu)
     }
 }
 
-static void PpuPaletteWrite(Ppu *ppu, const uint8_t palette_addr, const uint8_t data)
+static inline void PpuPaletteWrite(Ppu *ppu, const uint8_t palette_addr, const uint8_t data)
 {
     ppu->palettes[palette_addr] = data;
 
@@ -291,14 +319,14 @@ static void PpuPaletteWrite(Ppu *ppu, const uint8_t palette_addr, const uint8_t 
         ppu->palettes[palette_addr ^ 0x10] = data;
 }
 
-static void PPU_WriteCtrl(Ppu *ppu, const uint8_t data)
+static inline void PpuWriteCtrl(Ppu *ppu, const uint8_t data)
 {
     ppu->ctrl.raw = data;
     ppu->t.scrolling.name_table_sel = data & 0x3;
-    //printf("PPU_WriteCtrl: NMI: %d scanline:%d cycle: %d\n", ppu->ctrl.vblank_nmi, ppu->scanline, ppu->cycle_counter);
+    //printf("PpuWriteCtrl: NMI: %d scanline:%d cycle: %d\n", ppu->ctrl.vblank_nmi, ppu->scanline, ppu->cycle_counter);
 }
 
-void PPU_WriteData(Ppu *ppu, const uint8_t data)
+void PpuWriteData(Ppu *ppu, const uint8_t data)
 {
     const uint16_t addr = ppu->v.raw & 0x3FFF;
 
@@ -313,6 +341,8 @@ void PPU_WriteData(Ppu *ppu, const uint8_t data)
             break;
         }
         case 0x2:
+            PpuNametableWrite(ppu, addr, data);
+            break;
         case 0x3:
         {
             if (addr < 0x3F00)
@@ -337,7 +367,7 @@ void PPU_WriteData(Ppu *ppu, const uint8_t data)
     }
 }
 
-static void PPU_WriteScroll(Ppu *ppu, const uint8_t value)
+static inline void PpuWriteScroll(Ppu *ppu, const uint8_t value)
 {
     if (!ppu->w)
     {
@@ -354,13 +384,12 @@ static void PPU_WriteScroll(Ppu *ppu, const uint8_t value)
     ppu->w = !ppu->w;
 }
 
-uint8_t PPU_ReadStatus(Ppu *ppu)
+static inline uint8_t PpuReadStatus(Ppu *ppu)
 {
     PpuStatus ret_status = ppu->status;
     ret_status.open_bus = ppu->io_bus & 0x1F;
 
-    //if (SystemGetCpu()->pc != 0xF073)
-    //    printf("PPU_ReadStatus : %d scanline:%d cycle: %d\n", ppu->status.vblank, ppu->scanline, ppu->cycle_counter);
+    //printf("PpuReadStatus: %d scanline:%d cycle: %d\n", ppu->status.vblank, ppu->scanline, ppu->cycle_counter);
 
     // Clear vblank flag here and on the next ppu cycle
     ppu->status.vblank = 0;
@@ -371,7 +400,7 @@ uint8_t PPU_ReadStatus(Ppu *ppu)
     return ret_status.raw;
 }
 
-uint8_t PPU_ReadData(Ppu *ppu)
+static inline uint8_t PpuReadData(Ppu *ppu)
 {
     uint16_t addr = ppu->v.raw & 0x3FFF;
     uint8_t data = 0;
@@ -426,12 +455,12 @@ uint8_t PPU_ReadData(Ppu *ppu)
     return data;
 }
 
-uint8_t ReadPPURegister(Ppu *ppu, const uint16_t addr)
+uint8_t PpuReadReg(Ppu *ppu, const uint16_t addr)
 {
     switch (addr & 7)
     {
         case PPU_STATUS:
-            ppu->io_bus = PPU_ReadStatus(ppu);
+            ppu->io_bus = PpuReadStatus(ppu);
             break;
         case OAM_DATA:
         {
@@ -449,7 +478,7 @@ uint8_t ReadPPURegister(Ppu *ppu, const uint16_t addr)
             break;
         }
         case PPU_DATA:
-            ppu->io_bus = PPU_ReadData(ppu);
+            ppu->io_bus = PpuReadData(ppu);
             break;
     }
 
@@ -457,7 +486,7 @@ uint8_t ReadPPURegister(Ppu *ppu, const uint16_t addr)
     return ppu->io_bus;
 }
 
-void WritePPURegister(Ppu *ppu, const uint16_t addr, const uint8_t data)
+void PpuWriteReg(Ppu *ppu, const uint16_t addr, const uint8_t data)
 {
     const uint16_t reg = addr & 7;
 
@@ -468,7 +497,7 @@ void WritePPURegister(Ppu *ppu, const uint16_t addr, const uint8_t data)
     switch (reg)
     {
         case PPU_CTRL:
-            PPU_WriteCtrl(ppu, data);
+            PpuWriteCtrl(ppu, data);
             break;
         case PPU_MASK:
             ppu->mask.raw = data;
@@ -494,13 +523,13 @@ void WritePPURegister(Ppu *ppu, const uint16_t addr, const uint8_t data)
             break;
         }
         case PPU_SCROLL:
-            PPU_WriteScroll(ppu, data);
+            PpuWriteScroll(ppu, data);
             break;
         case PPU_ADDR:
-            PPU_WriteAddrReg(ppu, data);
+            PpuWriteAddrReg(ppu, data);
             break;
         case PPU_DATA:
-            PPU_WriteData(ppu, data);
+            PpuWriteData(ppu, data);
             break;
     }
     ppu->io_bus = data;
@@ -571,18 +600,17 @@ void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const 
     ppu->ext_input = 0;
     ppu->copy_t_delay = 2;
     ppu->warmup = warmup;
-    //ppu->status.open_bus = 0x1C;
 }
 
-static void DrawPixel(uint32_t *buffer, int x, int y, Color color)
+static inline void DrawPixel(uint32_t *buffer, int x, int y, Color color)
 {
-    if (x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT)
+    if (__builtin_expect(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT, 0))
         return;
 
     buffer[y * SCREEN_WIDTH + x] = (uint32_t)((color.r << 24) | (color.g << 16) | (color.b << 8) | 255);
 }
 
-static void PpuResetOAM2(Ppu *ppu)
+static inline void PpuResetOAM2(Ppu *ppu)
 {
     ppu->oam_buffer = 0xFF;
     memset(ppu->oam2, 0xFF, sizeof(ppu->oam2));
@@ -593,14 +621,14 @@ static void PpuResetOAM2(Ppu *ppu)
     ppu->sprite_in_range = false;
 }
 
-static void PpuSpriteRangeCheck(Ppu *ppu, const uint8_t sprite_byte)
+static inline void PpuSpriteRangeCheck(Ppu *ppu, const uint8_t sprite_byte)
 {
     const int y_offset = ((uint8_t)ppu->scanline - sprite_byte);
-    ppu->sprite_in_range = y_offset >= 0 && y_offset < (ppu->ctrl.sprite_size ? 16 : 8);
+    ppu->sprite_in_range = y_offset >= 0 && y_offset < (8 << ppu->ctrl.sprite_size);
     ppu->sprite_y_offset = y_offset & 0xF;
 }
 
-static void PpuSpritesEval(Ppu *ppu)
+static inline void PpuSpritesEval(Ppu *ppu)
 {
     if (ppu->cycle_counter & 1)
     {
@@ -647,7 +675,7 @@ static void PpuSpritesEval(Ppu *ppu)
     }
 }
 
-static void PpuUpdatePAR(Ppu *ppu, PictureAddrMode mode, Sprite *curr_sprite)
+static inline void PpuUpdatePAR(Ppu *ppu, PictureAddrMode mode, Sprite *curr_sprite)
 {
     switch (mode)
     {
@@ -688,7 +716,7 @@ static void PpuUpdatePAR(Ppu *ppu, PictureAddrMode mode, Sprite *curr_sprite)
     }
 }
 
-static void PpuHandleSprite0Hit(Ppu *ppu, const int xpos, const int fifo_lane, const uint8_t bg_pixel, const uint8_t sprite_pixel)
+static inline void PpuHandleSprite0Hit(Ppu *ppu, const int xpos, const int fifo_lane, const uint8_t bg_pixel, const uint8_t sprite_pixel)
 {
     if (!bg_pixel || !sprite_pixel)
         return;
@@ -699,7 +727,7 @@ static void PpuHandleSprite0Hit(Ppu *ppu, const int xpos, const int fifo_lane, c
     ppu->status.sprite_hit = xpos != 255;
 }
 
-static void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scanline, const uint8_t bg_pixel)
+static inline void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scanline, const uint8_t bg_pixel)
 {
     const bool valid_xpos = (ppu->mask.show_sprites_left_corner || xpos > 7);
 
@@ -742,7 +770,7 @@ static void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scanline, c
     }
 }
 
-static inline void PpuShiftRegsUpdate(Ppu *ppu)
+static inline inline void PpuShiftRegsUpdate(Ppu *ppu)
 {
     ppu->bg_shift_low.raw <<= 1;
     ppu->bg_shift_high.raw <<= 1;
@@ -750,7 +778,7 @@ static inline void PpuShiftRegsUpdate(Ppu *ppu)
     ppu->attrib_shift_high.raw <<= 1;
 }
 
-static inline void PpuFetchShifters(Ppu *ppu)
+static inline inline void PpuFetchShifters(Ppu *ppu)
 {
     ppu->bg_shift_low.low = ppu->bg_lsb;
     ppu->bg_shift_high.low = ppu->bg_msb;
@@ -762,7 +790,7 @@ static inline void PpuFetchShifters(Ppu *ppu)
     ppu->attrib_shift_high.low = latch_high * 0xFF;
 }
 
-static void PpuRender(Ppu *ppu, int scanline)
+static inline void PpuRender(Ppu *ppu, int scanline)
 {
     // The effective x positon is the current cycle - 1, since cycle 0 is a dummy cycle
     const int xpos = ppu->cycle_counter - 1;
@@ -840,7 +868,7 @@ static void PpuRender(Ppu *ppu, int scanline)
     }
 }
 
-static void PpuFetchSprite(Ppu *ppu, int sprite_num)
+static inline void PpuFetchSprite(Ppu *ppu, int sprite_num)
 {
     Sprite *curr_sprite = &ppu->oam2[sprite_num];
     const int effective_cycle = ppu->cycle_counter - 257;
@@ -891,7 +919,7 @@ void PpuScheduleRendererUpdate(Ppu *ppu)
     ppu->renderer_update = true;
 }
 
-static void PpuUpdateRenderingState(Ppu *ppu)
+static inline void PpuUpdateRenderingState(Ppu *ppu)
 {
     if (!ppu->renderer_update)
         return;
@@ -900,7 +928,7 @@ static void PpuUpdateRenderingState(Ppu *ppu)
     ppu->renderer_update = false;
 }
 
-static void PpuCycleUpdate(Ppu *ppu)
+static inline void PpuCycleUpdate(Ppu *ppu)
 {
     ppu->cycle_counter = (ppu->cycle_counter + 1) % 341;
 

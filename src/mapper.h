@@ -64,6 +64,10 @@ typedef union
 
 typedef struct 
 {
+    // Pre-Computed Chr bank info
+    uint16_t chr_bank_size;
+    uint16_t chr_bank_mask;
+
     uint16_t shift_count;
     Mmc1ShiftReg shift;
     Mmc1LoadReg load;

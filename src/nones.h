@@ -17,9 +17,7 @@ typedef struct
 {
     char cpu_msg[128];
     char fps_msg[8];
-    char ups_msg[8];
     uint64_t frames;
-    uint64_t updates;
     uint64_t timer;
 } NonesInfo;
 

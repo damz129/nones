@@ -342,8 +342,8 @@ void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, uint32
 void PPU_Tick(Ppu *ppu);
 void PPU_Reset(Ppu *ppu);
 void PpuScheduleRendererUpdate(Ppu *ppu);
-uint8_t ReadPPURegister(Ppu *ppu, const uint16_t addr);
-void WritePPURegister(Ppu *ppu, const uint16_t addr, const uint8_t data);
+uint8_t PpuReadReg(Ppu *ppu, const uint16_t addr);
+void PpuWriteReg(Ppu *ppu, const uint16_t addr, const uint8_t data);
 void PpuSetArrangement(NameTableArrangement mode, int page);
 void PpuSetNameTable(int nt, int mode);
 uint8_t PpuNametableRead(Ppu *ppu, uint16_t addr);

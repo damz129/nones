@@ -27,10 +27,6 @@ BnRom bn_rom;
 Nanjing nanjing;
 Camerica camerica;
 
-static const uint16_t mmc1_chr_bank_sizes[2] = 
-{
-    0x2000, 0x1000
-};
 
 static uint8_t NromReadPrgRom(Cart *cart, uint16_t addr)
 {
@@ -367,11 +363,14 @@ static uint8_t NromReadChrRom(Cart *cart, const uint16_t addr)
     return CartReadChr(cart, addr);
 }
 
+static inline void Mmc1UpdateChrBankInfo(void)
+{
+    mmc1.chr_bank_size = 0x1000 << (mmc1.control.chr_rom_bank_mode ^ 1);
+    mmc1.chr_bank_mask = mmc1.chr_bank_size - 1;
+}
+
 static uint8_t Mmc1ReadChrRom(Cart *cart, const uint16_t addr)
 {
-    uint32_t bank_size = mmc1_chr_bank_sizes[mmc1.control.chr_rom_bank_mode];
-
-    // Select chr bank (5-bit value, max 32 banks)
     uint32_t bank = (addr < 0x1000 || !mmc1.control.chr_rom_bank_mode) ? mmc1.chr_bank0 : mmc1.chr_bank1;
 
     // Ignore low bit in 8 Kib mode
@@ -382,7 +381,7 @@ static uint8_t Mmc1ReadChrRom(Cart *cart, const uint16_t addr)
         bank &= 1;
 
     // Compute CHR-ROM address
-    uint32_t final_addr = ((bank * bank_size) + (addr & (bank_size - 1)));
+    const uint32_t final_addr = ((bank * mmc1.chr_bank_size) + (addr & mmc1.chr_bank_mask));
 
     return CartReadChr(cart, final_addr);
 }
@@ -445,7 +444,7 @@ static void Mmc2WriteChr(Cart *cart, const uint16_t addr, const uint8_t data)
 
 static uint32_t GetMmc3ChrAddr(const uint16_t addr)
 {
-    const uint32_t effective_addr = addr ^ (mmc3.bank_sel.chr_a12_invert * 0x1000);
+    const uint32_t effective_addr = addr ^ (mmc3.bank_sel.chr_a12_invert << 12);
 
     // Branch version
     //uint32_t final_addr = 0;
@@ -463,7 +462,7 @@ static uint32_t GetMmc3ChrAddr(const uint16_t addr)
     // Branchless
     uint32_t region = effective_addr >> 12;
     uint32_t shift = 10 + (region ^ 1);
-    uint32_t offset = region * 2;
+    uint32_t offset = region << 1;
     uint32_t bank_size = 1 << shift;
 
     uint32_t index = (effective_addr >> shift) - offset;
@@ -692,6 +691,7 @@ static void Mmc1RegWrite(const uint16_t addr, const uint8_t data)
     {
         case 0:
             mmc1.control.raw = reg;
+            Mmc1UpdateChrBankInfo();
             Mmc1SetArrangement(mmc1.control.name_table_setup);
             //printf("Set nametable mode to: %d\n", mmc1.control.name_table_setup);
             //printf("Set prg rom bank mode to: %d\n", mmc1.control.prg_rom_bank_mode);
@@ -758,7 +758,6 @@ static void Mmc3RegWriteOdd(const uint16_t addr, const uint8_t data)
                 effective_data >>= 1;
             }
             mmc3.regs[mmc3.bank_sel.reg] = effective_data;
-        
             //printf("Set MMC3 reg %d bank value 0x%X\n", mmc3.bank_sel.reg, effective_data);
             break;
         }

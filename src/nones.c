@@ -40,14 +40,12 @@ static void NonesDrawDebugInfo(Nones *nones, NonesInfo *info)
     if (SDL_GetTicks() - info->timer >= 1000)
     {
         snprintf(info->fps_msg, sizeof(info->fps_msg), "FPS:%lu", info->frames);
-        snprintf(info->ups_msg, sizeof(info->ups_msg), "UPS:%lu", info->updates);
-        info->updates = info->frames = 0;
+        info->frames = 0;
         info->timer += 1000;
     }
 
     SDL_SetRenderDrawColor(nones->renderer, 255, 255, 84, SDL_ALPHA_OPAQUE);
     SDL_RenderDebugText(nones->renderer, 200, 1, info->fps_msg);
-    SDL_RenderDebugText(nones->renderer, 200, 9, info->ups_msg);
 }
 
 static void NonesSetIntegerScale(Nones *nones, int scale)
@@ -293,9 +291,7 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
     NonesInfo info = {
         .cpu_msg = {'\0'},
         .fps_msg = {'\0'},
-        .ups_msg = {'\0'},
         .frames = 0,
-        .updates = 0,
         .timer = SDL_GetTicks(),
     };
 
@@ -350,19 +346,18 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
             SystemRun(nones->system, nones->debug_info);
 
             accumulator -= accum_delta;
-            ++info.updates;
+
+            SDL_LockTexture(nones->texture, NULL, &raw_pixels, &raw_pitch);
+            memcpy(raw_pixels, nones->system->ppu->buffers[1], buffer_size);
+            SDL_UnlockTexture(nones->texture);
+
+            SDL_RenderClear(nones->renderer);
+            SDL_RenderTexture(nones->renderer, nones->texture, NULL, NULL);
+
+            NonesDrawDebugInfo(nones, &info);
+
+            SDL_RenderPresent(nones->renderer);
         }
-
-        SDL_LockTexture(nones->texture, NULL, &raw_pixels, &raw_pitch);
-        memcpy(raw_pixels, nones->system->ppu->buffers[1], buffer_size);
-        SDL_UnlockTexture(nones->texture);
-
-        SDL_RenderClear(nones->renderer);
-        SDL_RenderTexture(nones->renderer, nones->texture, NULL, NULL);
-
-        NonesDrawDebugInfo(nones, &info);
-
-        SDL_RenderPresent(nones->renderer);
 
         uint64_t frame_time = SDL_GetTicksNS() - start_time;
         if (frame_time < FRAME_CAP_NS)

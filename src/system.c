@@ -247,8 +247,6 @@ uint8_t BusRead(const uint16_t addr)
 {
     System *system = system_ptr;
     ++system->cpu->cycles;
-    // Extract A15, A14, and A13
-    uint8_t region = (addr >> 13) & 0x7;
 
     if (ApuRegsActivated(system))
     {
@@ -271,13 +269,13 @@ uint8_t BusRead(const uint16_t addr)
             // Update bits 0–4
             system->bus_data |= (ReadJoyPadReg(system->joy_pad2) & 0x1F);
         }
-        else if (addr >= 0x4000 && addr < 0x6000)
-        {
-            DEBUG_LOG("Open bus read! addr: 0x%04X bus: %X\n", addr, system->bus_data);
-        }
+        //else if (addr >= 0x4000 && addr < 0x6000)
+        //{
+        //    DEBUG_LOG("Open bus read! addr: 0x%04X bus: %X\n", addr, system->bus_data);
+        //}
     }
 
-    switch (region)
+    switch (addr >> 13)
     {
         // $0000 - $1FFF
         case 0x0:
@@ -286,7 +284,7 @@ uint8_t BusRead(const uint16_t addr)
 
         // $2000 - $3FFF
         case 0x1:
-            system->bus_data = ReadPPURegister(system->ppu, addr);
+            system->bus_data = PpuReadReg(system->ppu, addr);
             break;
         default:
         {
@@ -318,10 +316,8 @@ void BusWrite(const uint16_t addr, const uint8_t data)
 {
     System *system = system_ptr;
     ++system->cpu->cycles;
-    // Extract A15, A14, and A13
-    uint8_t region = (addr >> 13) & 0x7;
 
-    switch (region)
+    switch (addr >> 13)
     {
         // $0000 - $1FFF
         case 0x0:
@@ -331,7 +327,7 @@ void BusWrite(const uint16_t addr, const uint8_t data)
 
         // $2000 - $3FFF
         case 0x1:
-            WritePPURegister(system->ppu, addr, data);
+            PpuWriteReg(system->ppu, addr, data);
             break;
 
         // $4000 - $5FFF
@@ -483,15 +479,16 @@ bool SystemPollAllIrqs(void)
 }
 
 // The PPU pulls /NMI low if and only if both vblank_flag and NMI_output are true.
-static uint8_t SystemReadNmiPin(System *system)
+// However we can get the same results by doing the opposite.
+static inline uint8_t SystemReadNmiPin(System *system)
 {
-    return ~(system->ppu->ctrl.vblank_nmi & system->ppu->status.vblank);
+    return (system->ppu->ctrl.vblank_nmi & system->ppu->status.vblank);
 }
 
 static void SystemPollNmi(System *system)
 {
-    uint8_t current_nmi_pin = SystemReadNmiPin(system);
-    system->cpu->nmi_pending |= (~current_nmi_pin & system->cpu->nmi_pin);
+    const uint8_t current_nmi_pin = SystemReadNmiPin(system);
+    system->cpu->nmi_pending |= (current_nmi_pin & ~system->cpu->nmi_pin);
     system->cpu->nmi_pin = current_nmi_pin;
 }
 
