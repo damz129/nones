@@ -341,7 +341,7 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
 
         NonesHandleInput(nones);
 
-        while (accumulator >= accum_delta)
+        if (accumulator >= accum_delta)
         {
             SystemRun(nones->system, nones->debug_info);
 
@@ -368,4 +368,3 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
 
     NonesShutdown(nones);
 }
-

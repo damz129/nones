@@ -23,6 +23,8 @@ static uint8_t vram[0x800];
 // Pointers to handle mirroring
 static uint8_t *nametables[4];
 
+//#define FAST_SPRITE_EVAL
+
 static const Color sys_palette[64] =
 {
     {0x66, 0x66, 0x66},
@@ -675,6 +677,29 @@ static inline void PpuSpritesEval(Ppu *ppu)
     }
 }
 
+static inline void PpuSpritesEvalFast(Ppu *ppu)
+{
+    ppu->sprite0_loaded = false;
+
+    for (int i = 0; i < 64; i++)
+    {
+        Sprite curr_sprite = ppu->oam1[i];
+        PpuSpriteRangeCheck(ppu, curr_sprite.y);
+
+        if (!ppu->sprite_in_range)
+            continue;
+
+        if (ppu->found_sprites == 8)
+        {
+            ppu->status.sprite_overflow = true;
+            break;
+        }
+
+        ppu->sprite0_loaded |= !i;
+        ppu->oam2[ppu->found_sprites++] = curr_sprite;
+    }
+}
+
 static inline void PpuUpdatePAR(Ppu *ppu, PictureAddrMode mode, Sprite *curr_sprite)
 {
     switch (mode)
@@ -970,10 +995,17 @@ void PPU_Tick(Ppu *ppu)
                 PpuResetOAM2(ppu);
             }
 
+#ifdef FAST_SPRITE_EVAL
+            if (ppu->cycle_counter == 256 && ppu->scanline != 261)
+            {
+                PpuSpritesEvalFast(ppu);
+            }
+#else
             if (ppu->cycle_counter > 64 && ppu->cycle_counter < 257 && ppu->scanline != 261)
             {
                 PpuSpritesEval(ppu);
             }
+#endif
 
             if (ppu->cycle_counter == 256)
             {
