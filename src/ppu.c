@@ -795,7 +795,7 @@ static inline void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scan
     }
 }
 
-static inline inline void PpuShiftRegsUpdate(Ppu *ppu)
+static inline void PpuShiftRegsUpdate(Ppu *ppu)
 {
     ppu->bg_shift_low.raw <<= 1;
     ppu->bg_shift_high.raw <<= 1;
@@ -803,7 +803,7 @@ static inline inline void PpuShiftRegsUpdate(Ppu *ppu)
     ppu->attrib_shift_high.raw <<= 1;
 }
 
-static inline inline void PpuFetchShifters(Ppu *ppu)
+static inline void PpuFetchShifters(Ppu *ppu)
 {
     ppu->bg_shift_low.low = ppu->bg_lsb;
     ppu->bg_shift_high.low = ppu->bg_msb;
@@ -815,13 +815,12 @@ static inline inline void PpuFetchShifters(Ppu *ppu)
     ppu->attrib_shift_high.low = latch_high * 0xFF;
 }
 
-static inline void PpuRender(Ppu *ppu, int scanline)
+static inline void PpuFetchBG(Ppu *ppu)
 {
     // The effective x positon is the current cycle - 1, since cycle 0 is a dummy cycle
     const int xpos = ppu->cycle_counter - 1;
 
-    if (ppu->rendering)
-        PpuShiftRegsUpdate(ppu);
+    PpuShiftRegsUpdate(ppu);
 
     switch (xpos & 7)
     {
@@ -865,31 +864,9 @@ static inline void PpuRender(Ppu *ppu, int scanline)
             ppu->par.bitplane = 1;
             // Bitplane 1
             ppu->bg_msb = PpuReadChr(ppu, ppu->par.raw);
-            if (ppu->rendering)
-                PpuIncrementScrollX(ppu);
+            PpuIncrementScrollX(ppu);
             break;
         }
-    }
-
-    if (scanline < 240 && xpos < 256)
-    {
-        // Fine X tells us which bit from the shift regs we want to use
-        const int bit = 15 - ppu->x;
-
-        uint8_t bg_pixel_low  = (ppu->bg_shift_low.raw >> bit) & 1;
-        uint8_t bg_pixel_high = (ppu->bg_shift_high.raw >> bit) & 1;
-        uint8_t bg_palette_low  = (ppu->attrib_shift_low.raw >> bit) & 1;
-        uint8_t bg_palette_high = (ppu->attrib_shift_high.raw >> bit) & 1;
-
-        const bool draw_bg = ppu->rendering && ppu->mask.bg_rendering && (ppu->mask.show_bg_left_corner || xpos > 7);
-
-        const uint8_t bg_pixel = ((bg_pixel_high << 1) | bg_pixel_low) * draw_bg;
-        const uint8_t bg_palette = (bg_palette_high << 1) | bg_palette_low;
-
-        Color color = GetBGColor(ppu, bg_palette, bg_pixel);
-        DrawPixel(ppu->buffers[0], xpos, scanline, color);
-
-        PpuRenderSpritePixel(ppu, xpos, scanline, bg_pixel);
     }
 }
 
@@ -939,6 +916,54 @@ static inline void PpuFetchSprite(Ppu *ppu, int sprite_num)
     }
 }
 
+static inline void PpuFetchSpritesFast(Ppu *ppu)
+{
+    for (int i = 0; i < 8; i++)
+    {
+        Sprite *curr_sprite = &ppu->oam2[i];
+        PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
+        ppu->tile_id = ExtNameTableRead(ppu, ppu->bus_addr);
+        PpuUpdatePAR(ppu, PICTURE_MODE_SPRITES_8x8 + ppu->ctrl.sprite_size, curr_sprite);
+        PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
+
+        ExtNameTableRead(ppu, ppu->bus_addr);
+        ppu->fifo[i].attribs = curr_sprite->attribs;
+        ppu->fifo[i].x = curr_sprite->x;
+
+        // Bitplane 0
+        ppu->fifo[i].shift.low = PpuReadChr(ppu, ppu->par.raw) * ppu->sprite_in_range;
+        // Bitplane 1
+        ppu->par.bitplane = 1;
+        ppu->fifo[i].shift.high = PpuReadChr(ppu, ppu->par.raw) * ppu->sprite_in_range;
+    }
+}
+
+static inline void PpuRenderPixel(Ppu *ppu)
+{
+    if (!ppu->cycle_counter || (ppu->scanline == 261 || ppu->cycle_counter > 256))
+        return;
+
+    const int xpos = ppu->cycle_counter - 1;
+
+    // Fine X tells us which bit from the shift regs we want to use
+    const int bit = 15 - ppu->x;
+
+    uint8_t bg_pixel_low  = (ppu->bg_shift_low.raw >> bit) & 1;
+    uint8_t bg_pixel_high = (ppu->bg_shift_high.raw >> bit) & 1;
+    uint8_t bg_palette_low  = (ppu->attrib_shift_low.raw >> bit) & 1;
+    uint8_t bg_palette_high = (ppu->attrib_shift_high.raw >> bit) & 1;
+
+    const bool draw_bg = ppu->rendering && ppu->mask.bg_rendering && (ppu->mask.show_bg_left_corner || xpos > 7);
+
+    const uint8_t bg_pixel = ((bg_pixel_high << 1) | bg_pixel_low) * draw_bg;
+    const uint8_t bg_palette = (bg_palette_high << 1) | bg_palette_low;
+
+    Color color = GetBGColor(ppu, bg_palette, bg_pixel);
+    DrawPixel(ppu->buffers[0], xpos, ppu->scanline, color);
+
+    PpuRenderSpritePixel(ppu, xpos, ppu->scanline, bg_pixel);
+}
+
 void PpuScheduleRendererUpdate(Ppu *ppu)
 {
     ppu->renderer_update = true;
@@ -985,11 +1010,11 @@ void PPU_Tick(Ppu *ppu)
 
         ppu->skipped_cycle = false;
 
-        if (ppu->cycle_counter && (ppu->cycle_counter <= 257 || (ppu->cycle_counter >= 321 && ppu->cycle_counter <= 336)))
-            PpuRender(ppu, ppu->scanline);
-
         if (ppu->rendering)
         {
+            if (ppu->cycle_counter && (ppu->cycle_counter <= 257 || (ppu->cycle_counter >= 321 && ppu->cycle_counter <= 336)))
+                PpuFetchBG(ppu);
+
             if (ppu->cycle_counter == 64 && ppu->scanline != 261)
             {
                 PpuResetOAM2(ppu);
@@ -1033,12 +1058,19 @@ void PPU_Tick(Ppu *ppu)
                 ppu->v.raw_bits.bit11 = ppu->t.raw_bits.bit11;
             }
 
+#ifdef FAST_SPRITE_EVAL
+            if (ppu->cycle_counter == 260)
+            {
+                ppu->oam1_addr = 0;
+                PpuFetchSpritesFast(ppu);
+            }
+#else
             if (ppu->cycle_counter >= 257 && ppu->cycle_counter <= 320)
             {
                 ppu->oam1_addr = 0;
                 PpuFetchSprite(ppu, (ppu->cycle_counter - 257) >> 3);
             }
-
+#endif
             if (ppu->cycle_counter == 337 || ppu->cycle_counter == 339)
             {
                 PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
@@ -1052,6 +1084,8 @@ void PPU_Tick(Ppu *ppu)
                 }
             }
         }
+
+        PpuRenderPixel(ppu);
     }
 
     if (ppu->scanline == 241 && ppu->cycle_counter == 1)
