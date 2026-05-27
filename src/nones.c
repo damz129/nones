@@ -46,13 +46,21 @@ static void NonesDrawDebugInfo(Nones *nones, NonesInfo *info)
 
     SDL_SetRenderDrawColor(nones->renderer, 255, 255, 84, SDL_ALPHA_OPAQUE);
     SDL_RenderDebugText(nones->renderer, 200, 1, info->fps_msg);
+    SDL_SetRenderDrawColor(nones->renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+}
+
+static void NonesToggleFullScreen(Nones *nones)
+{
+    nones->fullscreen = !nones->fullscreen;
+    if (!SDL_SetWindowFullscreen(nones->window, nones->fullscreen))
+    {
+        SDL_Log("SDL_SetWindowFullscreen failed: %s\n", SDL_GetError());
+    }
 }
 
 static void NonesSetIntegerScale(Nones *nones, int scale)
 {
     SDL_SetWindowSize(nones->window, SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale);
-    SDL_SetRenderScale(nones->renderer, scale, scale);
-    //SDL_SetRenderLogicalPresentation(nones->renderer, SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
     // Doesn't work on Wayland...
     SDL_SetWindowPosition(nones->window,  SDL_WINDOWPOS_CENTERED,  SDL_WINDOWPOS_CENTERED);
 }
@@ -191,6 +199,14 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
         exit(EXIT_FAILURE);
     }
 
+    if (!SDL_SetRenderLogicalPresentation(nones->renderer,
+                                          SCREEN_WIDTH,
+                                          SCREEN_HEIGHT,
+                                          SDL_LOGICAL_PRESENTATION_LETTERBOX))
+    {
+        SDL_Log("SDL_SetRenderLogicalPresentation failed: %s\n", SDL_GetError());
+    }
+
     if (!SDL_SetRenderVSync(nones->renderer, 1))
     {
         SDL_Log("Could not enable VSync! SDL error: %s\n", SDL_GetError());
@@ -237,15 +253,18 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
 
     SDL_ResumeAudioStreamDevice(stream);
 
-    //SDL_SetRenderLogicalPresentation(nones->renderer, SCREEN_WIDTH, SCREEN_WIDTH,  SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
-    SDL_SetRenderScale(nones->renderer, 2, 2);
-
     nones->texture = SDL_CreateTexture(nones->renderer,
         SDL_PIXELFORMAT_RGBA8888,
         SDL_TEXTUREACCESS_STREAMING,
         SCREEN_WIDTH, SCREEN_HEIGHT);
 
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+    // Make sure the linked SDL3 library being used is also the correct version.
+    SDL_ScaleMode scale_mode = (SDL_GetVersion() >= SDL_VERSIONNUM(3,4,0) ? SDL_SCALEMODE_PIXELART : SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureScaleMode(nones->texture, scale_mode);
+#else
     SDL_SetTextureScaleMode(nones->texture, SDL_SCALEMODE_NEAREST);
+#endif
 }
 
 static void NonesShutdown(Nones *nones)
@@ -319,6 +338,9 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
                 case SDL_EVENT_KEY_UP:
                     switch (event.key.key)
                     {
+                        case SDLK_F:
+                            NonesToggleFullScreen(nones);
+                            break;
                         case SDLK_F1:
                             nones->debug_info = !nones->debug_info;
                             break;

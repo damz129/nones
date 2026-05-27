@@ -118,6 +118,10 @@ Set window size integer scale (1x, 2x, 3x ect. 5x max)
 
 Exit emulator
 
+* `F`
+
+Toggle fullscreen
+
 * `F1`
 
 Enable/Disable CPU debug stats

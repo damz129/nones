@@ -35,6 +35,7 @@ typedef struct {
     SDL_Joystick *joystick2;
     int num_gamepads;
     bool debug_info;
+    bool fullscreen;
     bool quit;
 } Nones;
 
