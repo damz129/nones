@@ -46,7 +46,6 @@ static void NonesDrawDebugInfo(Nones *nones, NonesInfo *info)
 
     SDL_SetRenderDrawColor(nones->renderer, 255, 255, 84, SDL_ALPHA_OPAQUE);
     SDL_RenderDebugText(nones->renderer, 200, 1, info->fps_msg);
-    SDL_SetRenderDrawColor(nones->renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
 }
 
 static void NonesToggleFullScreen(Nones *nones)
@@ -373,11 +372,8 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sa
             memcpy(raw_pixels, nones->system->ppu->buffers[1], buffer_size);
             SDL_UnlockTexture(nones->texture);
 
-            SDL_RenderClear(nones->renderer);
             SDL_RenderTexture(nones->renderer, nones->texture, NULL, NULL);
-
             NonesDrawDebugInfo(nones, &info);
-
             SDL_RenderPresent(nones->renderer);
         }
 
