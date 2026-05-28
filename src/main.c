@@ -27,6 +27,8 @@ static void Help(void)
     printf("Options:\n"
            "  --help                             Display this information\n"
            "  --version                          Display version information\n"
+           "  --fullscreen                       Start in fullscreen\n"
+           "  --aspect-ratio=\"aspect-ratio-mode\" Set the screen aspect ratio: 0 = 1:1 (default), 1 = 8:7\n"
            "  --sdl-audio-driver=\"driver-name\"   Set the preferred audio driver for SDL to use\n"
            "  --ppu-warmup                       Enable the ppu warm up delay found on the NES-001(Will break some famicom games)\n"
            "  --apu-swap-duty-cycles             Enable the use of swapped duty cycles for the square/pulse channels(Needed for older famiclone games)\n"
@@ -51,6 +53,8 @@ int main(int argc, char **argv)
     }
 
     int sample_rate_mode = 0;
+    int aspect_ratio = 0;
+    bool fullscreen = false;
     bool ppu_warmup = false;
     bool swap_duty_cycles = false;
     bool override_audio_driver = false;
@@ -72,6 +76,28 @@ int main(int argc, char **argv)
             About();
             return EXIT_SUCCESS;
         }
+
+        if (strstr((argv[i]), "--aspect-ratio="))
+        {
+            char *delim_pos = strchr(argv[i], '=');
+            if (delim_pos != NULL)
+            {
+                char *aspect_ratio_str = delim_pos + 1;
+                char *end;
+                int new_aspect_ratio = (int)strtol(aspect_ratio_str, &end, 10);
+                if (new_aspect_ratio >= 0 && new_aspect_ratio <= 1)
+                    aspect_ratio = new_aspect_ratio;
+                else
+                {
+                    printf("Invalid sample rate mode!\n");
+                    Usage();
+                    return EXIT_FAILURE;
+                }
+            }
+        }
+
+        if (!strcmp((argv[i]), "--fullscreen"))
+            fullscreen = true;
 
         if (!strcmp((argv[i]), "--ppu-warmup"))
             ppu_warmup = true;
@@ -113,7 +139,7 @@ int main(int argc, char **argv)
     const int sample_rate = sample_rates[sample_rate_mode];
 
     Nones nones;
-    NonesRun(&nones, ppu_warmup, swap_duty_cycles, sample_rate, 
+    NonesRun(&nones, ppu_warmup, fullscreen, aspect_ratio, swap_duty_cycles, sample_rate,
             argv[1], override_audio_driver ? audio_driver : NULL);
     return EXIT_SUCCESS;
 }

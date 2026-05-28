@@ -57,9 +57,14 @@ static void NonesToggleFullScreen(Nones *nones)
     }
 }
 
+static int NonesGetScreenWidth(Nones *nones)
+{
+    return nones->aspect_ratio ? SCREEN_WIDTH + SCREEN_WIDTH_EDGE : SCREEN_WIDTH;
+}
+
 static void NonesSetIntegerScale(Nones *nones, int scale)
 {
-    SDL_SetWindowSize(nones->window, SCREEN_WIDTH * scale, SCREEN_HEIGHT * scale);
+    SDL_SetWindowSize(nones->window, NonesGetScreenWidth(nones) * scale, SCREEN_HEIGHT * scale);
     // Doesn't work on Wayland...
     SDL_SetWindowPosition(nones->window,  SDL_WINDOWPOS_CENTERED,  SDL_WINDOWPOS_CENTERED);
 }
@@ -155,11 +160,14 @@ static void NonesHandleInput(Nones *nones)
         NonesSetIntegerScale(nones, 5);
 }
 
-static void NonesInit(Nones *nones, const char *path, const char *audio_driver, const int sample_rate)
+static void NonesInit(Nones *nones, const char *path, const char *audio_driver, const int sample_rate, const int aspect_ratio, const bool fullscreen)
 {
     memset(nones, 0, sizeof(*nones));
     nones->arena = ArenaCreate(1024 * 1024 * 3);
     nones->system = SystemCreate(nones->arena);
+    nones->aspect_ratio = aspect_ratio;
+
+    const int screen_width = NonesGetScreenWidth(nones);
 
     if (SystemLoadCart(nones->arena, nones->system, path))
     {
@@ -181,7 +189,7 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
 
     SDL_Log("SDL audio driver: %s\n", SDL_GetCurrentAudioDriver());
 
-    nones->window = SDL_CreateWindow("nones", SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2, 0);
+    nones->window = SDL_CreateWindow("nones", screen_width * 2, SCREEN_HEIGHT * 2, 0);
     if (!nones->window)
     {
         SDL_Log("Window Error: %s", SDL_GetError());
@@ -199,7 +207,7 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
     }
 
     if (!SDL_SetRenderLogicalPresentation(nones->renderer,
-                                          SCREEN_WIDTH,
+                                          screen_width,
                                           SCREEN_HEIGHT,
                                           SDL_LOGICAL_PRESENTATION_LETTERBOX))
     {
@@ -210,6 +218,9 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
     {
         SDL_Log("Could not enable VSync! SDL error: %s\n", SDL_GetError());
     }
+
+    if (fullscreen)
+        NonesToggleFullScreen(nones);
 
     nones->gamepads = SDL_GetGamepads(&nones->num_gamepads);
     if (nones->gamepads)
@@ -264,6 +275,8 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
 #else
     SDL_SetTextureScaleMode(nones->texture, SDL_SCALEMODE_NEAREST);
 #endif
+
+    SDL_SetWindowPosition(nones->window,  SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 }
 
 static void NonesShutdown(Nones *nones)
@@ -290,10 +303,10 @@ static void NonesReset(Nones *nones)
     SystemReset(nones->system);
 }
 
-void NonesRun(Nones *nones, bool ppu_warmup, bool swap_duty_cycles, const int sample_rate,
-              const char *path, const char *audio_driver)
+void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_ratio, bool swap_duty_cycles,
+              const int sample_rate, const char *path, const char *audio_driver)
 {
-    NonesInit(nones, path, audio_driver, sample_rate);
+    NonesInit(nones, path, audio_driver, sample_rate, aspect_ratio, fullscreen);
 
     // Allocate pixel buffers (back and front)
     uint32_t *buffers[2];
