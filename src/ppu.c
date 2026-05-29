@@ -22,6 +22,8 @@
 static uint8_t vram[0x800];
 // Pointers to handle mirroring
 static uint8_t *nametables[4];
+// Filled on PPU Init
+static uint32_t color_lut[64][8];
 
 //#define FAST_SPRITE_EVAL
 
@@ -93,55 +95,7 @@ static const Color sys_palette[64] =
     {0x00, 0x00, 0x00}
 };
 
-static inline void PpuApplyColorEmphasis(Ppu *ppu, Color *color, uint8_t color_index)
-{
-    if (color_index == 0xE || color_index == 0xF)
-        return;
-
-    switch (ppu->mask.raw >> 5)
-    {
-        case 0x1:
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x2:
-            color->b *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x3:
-            color->b *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x4:
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x5:
-            color->b *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x6:
-            color->b *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-        case 0x7:
-            color->b *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->b *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            color->g *= COLOR_ATTENUATION;
-            color->r *= COLOR_ATTENUATION;
-            break;
-    }
-}
-
-static inline Color GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+static inline uint32_t GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
 {
     // Compute palette memory address
     const uint16_t palette_addr = 0x3F00 | (palette_index << 2) | pixel;
@@ -168,30 +122,20 @@ static inline Color GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint
         color_index &= 0x30;
     }
 
-    Color color = sys_palette[color_index & 0x3F];
-
-    if (ppu->mask.raw >> 5)
-        PpuApplyColorEmphasis(ppu, &color, color_index);
-
-    return color;
+    return color_lut[color_index & 0x3F][ppu->mask.raw >> 5];
 }
 
-static inline Color GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+static inline uint32_t GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
 {
     const uint16_t palette_addr = 0x10 | (palette_index << 2) | pixel;
-    uint16_t color_index = ppu->palettes[palette_addr];
+    uint16_t color_index = ppu->palettes[palette_addr & 0x1F];
 
     if (ppu->mask.grey_scale)
     {
         color_index &= 0x30;
     }
 
-    Color color = sys_palette[color_index & 0x3F];
-
-    if (ppu->mask.raw >> 5)
-        PpuApplyColorEmphasis(ppu, &color, color_index);
-
-    return color;
+    return color_lut[color_index & 0x3F][ppu->mask.raw >> 5];
 }
 
 static inline void PpuUpdateBus(Ppu *ppu, const uint16_t addr)
@@ -590,6 +534,55 @@ void PpuSetArrangement(NameTableArrangement mode, int page)
     }
 }
 
+static inline void PpuApplyColorEmphasis(Color *src_color, Color *dst_color, const int emph_bits, uint8_t color_index)
+{
+    *dst_color = *src_color;
+    if (color_index == 0xE || color_index == 0xF)
+        return;
+
+    switch (emph_bits)
+    {
+        case 0x1:
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x2:
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x3:
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x4:
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x5:
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x6:
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+        case 0x7:
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->b *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            dst_color->g *= COLOR_ATTENUATION;
+            dst_color->r *= COLOR_ATTENUATION;
+            break;
+    }
+}
+
 void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const uint32_t buffer_size)
 {
     memset(ppu, 0, sizeof(*ppu));
@@ -602,14 +595,27 @@ void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const 
     ppu->ext_input = 0;
     ppu->copy_t_delay = 2;
     ppu->warmup = warmup;
+
+    for (int i = 0; i < 64; i++)
+    {
+        Color color = sys_palette[i];
+        color_lut[i][0] = (uint32_t)((color.r << 24) | (color.g << 16) | (color.b << 8) | 255);
+
+        for (int j = 1; j < 8; j++)
+        {
+            Color color_emph;
+            PpuApplyColorEmphasis(&color, &color_emph, j, i);
+            color_lut[i][j] = (uint32_t)((color_emph.r << 24) | (color_emph.g << 16) | (color_emph.b << 8) | 255);
+        }
+    }
 }
 
-static inline void DrawPixel(uint32_t *buffer, int x, int y, Color color)
+static inline void DrawPixel(uint32_t *buffer, int x, int y, const uint32_t packed_color)
 {
     if (__builtin_expect(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT, 0))
         return;
 
-    buffer[y * SCREEN_WIDTH + x] = (uint32_t)((color.r << 24) | (color.g << 16) | (color.b << 8) | 255);
+    buffer[y * SCREEN_WIDTH + x] = packed_color;
 }
 
 static inline void PpuResetOAM2(Ppu *ppu)
@@ -752,7 +758,7 @@ static inline void PpuHandleSprite0Hit(Ppu *ppu, const int xpos, const int fifo_
     ppu->status.sprite_hit = xpos != 255;
 }
 
-static inline void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scanline, const uint8_t bg_pixel)
+static inline void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const uint8_t bg_pixel)
 {
     const bool valid_xpos = (ppu->mask.show_sprites_left_corner || xpos > 7);
 
@@ -776,8 +782,8 @@ static inline void PpuRenderSpritePixel(Ppu *ppu, const int xpos, const int scan
 
                 if (sprite_pixel && (!fifo_lane->attribs.priority || !bg_pixel))
                 {
-                    Color color = GetSpriteColor(ppu, fifo_lane->attribs.palette, sprite_pixel);
-                    DrawPixel(ppu->buffers[0], xpos, scanline, color);
+                    const uint32_t color = GetSpriteColor(ppu, fifo_lane->attribs.palette, sprite_pixel);
+                    DrawPixel(ppu->buffers[0], xpos, ppu->scanline, color);
                 }
             }
 
@@ -817,12 +823,9 @@ static inline void PpuFetchShifters(Ppu *ppu)
 
 static inline void PpuFetchBG(Ppu *ppu)
 {
-    // The effective x positon is the current cycle - 1, since cycle 0 is a dummy cycle
-    const int xpos = ppu->cycle_counter - 1;
-
     PpuShiftRegsUpdate(ppu);
 
-    switch (xpos & 7)
+    switch ((ppu->cycle_counter - 1) & 7)
     {
         case 0:
         {
@@ -921,20 +924,18 @@ static inline void PpuFetchSpritesFast(Ppu *ppu)
     for (int i = 0; i < 8; i++)
     {
         Sprite *curr_sprite = &ppu->oam2[i];
-        PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
-        ppu->tile_id = ExtNameTableRead(ppu, ppu->bus_addr);
+        ppu->tile_id = ExtNameTableRead(ppu, PpuGetNTAddr(ppu));
         PpuUpdatePAR(ppu, PICTURE_MODE_SPRITES_8x8 + ppu->ctrl.sprite_size, curr_sprite);
-        PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
 
-        ExtNameTableRead(ppu, ppu->bus_addr);
+        ExtNameTableRead(ppu, PpuGetNTAddr(ppu));
         ppu->fifo[i].attribs = curr_sprite->attribs;
         ppu->fifo[i].x = curr_sprite->x;
 
         // Bitplane 0
-        ppu->fifo[i].shift.low = PpuReadChr(ppu, ppu->par.raw) * ppu->sprite_in_range;
+        ppu->fifo[i].shift.low = PpuReadChr(ppu, ppu->par.raw);
         // Bitplane 1
         ppu->par.bitplane = 1;
-        ppu->fifo[i].shift.high = PpuReadChr(ppu, ppu->par.raw) * ppu->sprite_in_range;
+        ppu->fifo[i].shift.high = PpuReadChr(ppu, ppu->par.raw);
     }
 }
 
@@ -943,6 +944,7 @@ static inline void PpuRenderPixel(Ppu *ppu)
     if (!ppu->cycle_counter || (ppu->scanline == 261 || ppu->cycle_counter > 256))
         return;
 
+    // The effective x positon is the current cycle - 1, since cycle 0 is a dummy cycle
     const int xpos = ppu->cycle_counter - 1;
 
     // Fine X tells us which bit from the shift regs we want to use
@@ -958,10 +960,10 @@ static inline void PpuRenderPixel(Ppu *ppu)
     const uint8_t bg_pixel = ((bg_pixel_high << 1) | bg_pixel_low) * draw_bg;
     const uint8_t bg_palette = (bg_palette_high << 1) | bg_palette_low;
 
-    Color color = GetBGColor(ppu, bg_palette, bg_pixel);
+    const uint32_t color = GetBGColor(ppu, bg_palette, bg_pixel);
     DrawPixel(ppu->buffers[0], xpos, ppu->scanline, color);
 
-    PpuRenderSpritePixel(ppu, xpos, ppu->scanline, bg_pixel);
+    PpuRenderSpritePixel(ppu, xpos, bg_pixel);
 }
 
 void PpuScheduleRendererUpdate(Ppu *ppu)
