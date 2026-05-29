@@ -543,8 +543,8 @@ static inline void PpuApplyColorEmphasis(Color *src_color, Color *dst_color, con
     switch (emph_bits)
     {
         case 0x1:
+            dst_color->b *= COLOR_ATTENUATION;
             dst_color->g *= COLOR_ATTENUATION;
-            dst_color->r *= COLOR_ATTENUATION;
             break;
         case 0x2:
             dst_color->b *= COLOR_ATTENUATION;
@@ -552,8 +552,8 @@ static inline void PpuApplyColorEmphasis(Color *src_color, Color *dst_color, con
             break;
         case 0x3:
             dst_color->b *= COLOR_ATTENUATION;
-            dst_color->r *= COLOR_ATTENUATION;
             dst_color->g *= COLOR_ATTENUATION;
+            dst_color->b *= COLOR_ATTENUATION;
             dst_color->r *= COLOR_ATTENUATION;
             break;
         case 0x4:
