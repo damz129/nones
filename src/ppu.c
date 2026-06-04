@@ -823,43 +823,30 @@ static inline void PpuFetchShifters(Ppu *ppu)
 }
 
 #ifdef FAST_BG_FETCH
-static inline void PpuFetchBGTile(Ppu *ppu)
-{
-    // Use this if we are doing the bg fetch all at once in a 8 cycle window
-    //PpuFetchShifters(ppu);
-
-    // Use PpuUpdateBus for dot 0 a12 changes, slower
-    PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
-    // Faster
-    //ppu->bus_addr = PpuGetNTAddr(ppu);
-
-    ppu->tile_id = ExtNameTableRead(ppu, ppu->bus_addr);
-    PpuUpdatePAR(ppu, PICTURE_MODE_BG, NULL);
-    uint8_t attrib_data = ExtNameTableRead(ppu, PpuGetAttribAddr(ppu));
-    uint8_t shift = ((ppu->v.scrolling.coarse_y & 2) << 1) | (ppu->v.scrolling.coarse_x & 2);
-    ppu->attrib_data = (attrib_data >> shift) & 0x3;
-
-    // Bitplane 0
-    ppu->bg_lsb = PpuReadChr(ppu, ppu->par.raw);
-    // Bitplane 1
-    ppu->par.bitplane = 1;
-    ppu->bg_msb = PpuReadChr(ppu, ppu->par.raw);
-
-    PpuIncrementScrollX(ppu);
-}
-
 static inline void PpuFetchBG(Ppu *ppu)
 {
     PpuShiftRegsUpdate(ppu);
 
-    switch ((ppu->cycle_counter - 1) & 7)
+    const int cycle_index = (ppu->cycle_counter - 1) & 7;
+
+    if (!cycle_index)
     {
-        case 0:
-            PpuFetchShifters(ppu);
-            break;
-        case 1:
-            PpuFetchBGTile(ppu);
-            break;
+        PpuFetchShifters(ppu);
+        PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
+        ppu->tile_id = ExtNameTableRead(ppu, ppu->bus_addr);
+        PpuUpdatePAR(ppu, PICTURE_MODE_BG, NULL);
+    }
+    else if (cycle_index == 7)
+    {
+        uint8_t attrib_data = ExtNameTableRead(ppu, PpuGetAttribAddr(ppu));
+        uint8_t shift = ((ppu->v.scrolling.coarse_y & 2) << 1) | (ppu->v.scrolling.coarse_x & 2);
+        ppu->attrib_data = (attrib_data >> shift) & 0x3;
+        // Bitplane 0
+        ppu->bg_lsb = PpuReadChr(ppu, ppu->par.raw);
+        // Bitplane 1
+        ppu->par.bitplane = 1;
+        ppu->bg_msb = PpuReadChr(ppu, ppu->par.raw);
+        PpuIncrementScrollX(ppu);
     }
 }
 #else
