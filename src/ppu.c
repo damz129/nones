@@ -26,6 +26,7 @@ static uint8_t *nametables[4];
 static uint32_t color_lut[64][8];
 
 //#define FAST_SPRITE_EVAL
+#define FAST_BG_FETCH
 
 static const Color sys_palette[64] =
 {
@@ -821,6 +822,47 @@ static inline void PpuFetchShifters(Ppu *ppu)
     ppu->attrib_shift_high.low = latch_high * 0xFF;
 }
 
+#ifdef FAST_BG_FETCH
+static inline void PpuFetchBGTile(Ppu *ppu)
+{
+    // Use this if we are doing the bg fetch all at once in a 8 cycle window
+    //PpuFetchShifters(ppu);
+
+    // Use PpuUpdateBus for dot 0 a12 changes, slower
+    PpuUpdateBus(ppu, PpuGetNTAddr(ppu));
+    // Faster
+    //ppu->bus_addr = PpuGetNTAddr(ppu);
+
+    ppu->tile_id = ExtNameTableRead(ppu, ppu->bus_addr);
+    PpuUpdatePAR(ppu, PICTURE_MODE_BG, NULL);
+    uint8_t attrib_data = ExtNameTableRead(ppu, PpuGetAttribAddr(ppu));
+    uint8_t shift = ((ppu->v.scrolling.coarse_y & 2) << 1) | (ppu->v.scrolling.coarse_x & 2);
+    ppu->attrib_data = (attrib_data >> shift) & 0x3;
+
+    // Bitplane 0
+    ppu->bg_lsb = PpuReadChr(ppu, ppu->par.raw);
+    // Bitplane 1
+    ppu->par.bitplane = 1;
+    ppu->bg_msb = PpuReadChr(ppu, ppu->par.raw);
+
+    PpuIncrementScrollX(ppu);
+}
+
+static inline void PpuFetchBG(Ppu *ppu)
+{
+    PpuShiftRegsUpdate(ppu);
+
+    switch ((ppu->cycle_counter - 1) & 7)
+    {
+        case 0:
+            PpuFetchShifters(ppu);
+            break;
+        case 1:
+            PpuFetchBGTile(ppu);
+            break;
+    }
+}
+#else
 static inline void PpuFetchBG(Ppu *ppu)
 {
     PpuShiftRegsUpdate(ppu);
@@ -872,6 +914,7 @@ static inline void PpuFetchBG(Ppu *ppu)
         }
     }
 }
+#endif
 
 static inline void PpuFetchSprite(Ppu *ppu, int sprite_num)
 {
@@ -921,13 +964,14 @@ static inline void PpuFetchSprite(Ppu *ppu, int sprite_num)
 
 static inline void PpuFetchSpritesFast(Ppu *ppu)
 {
+    const uint16_t nt_addr = PpuGetNTAddr(ppu);
     for (int i = 0; i < 8; i++)
     {
         Sprite *curr_sprite = &ppu->oam2[i];
-        ppu->tile_id = ExtNameTableRead(ppu, PpuGetNTAddr(ppu));
+        ppu->tile_id = ExtNameTableRead(ppu, nt_addr);
         PpuUpdatePAR(ppu, PICTURE_MODE_SPRITES_8x8 + ppu->ctrl.sprite_size, curr_sprite);
 
-        ExtNameTableRead(ppu, PpuGetNTAddr(ppu));
+        ExtNameTableRead(ppu, nt_addr);
         ppu->fifo[i].attribs = curr_sprite->attribs;
         ppu->fifo[i].x = curr_sprite->x;
 
