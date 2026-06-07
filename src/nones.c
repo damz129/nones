@@ -163,7 +163,7 @@ static void NonesHandleInput(Nones *nones)
 static void NonesInit(Nones *nones, const char *path, const char *audio_driver, const int sample_rate, const int aspect_ratio, const bool fullscreen)
 {
     memset(nones, 0, sizeof(*nones));
-    nones->arena = ArenaCreate(1024 * 1024 * 3);
+    nones->arena = ArenaCreate(1024 * 1024 * 5);
     nones->system = SystemCreate(nones->arena);
     nones->aspect_ratio = aspect_ratio;
 

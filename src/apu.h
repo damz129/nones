@@ -296,7 +296,7 @@ enum ApuRegs
 
 void ApuClockEnvelope(ApuEnvelope *envelope, const uint8_t volume, const bool counter_halt);
 uint8_t ApuReadStatus(Apu *apu, const uint8_t bus_data);
-void WriteAPURegister(Apu *apu, const uint16_t addr, const uint8_t data);
+void ApuWriteReg(Apu *apu, const uint16_t addr, const uint8_t data);
 bool PollApuIrqs(Apu *apu);
 void ApuDmcDmaUpdate(Apu *apu);
 void APU_Init(Apu *apu, Arena *arena, const bool swap_duty_cycles, int sample_rate);

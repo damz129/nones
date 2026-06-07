@@ -63,16 +63,14 @@ typedef struct Cart {
     PrgRom prg_rom;
     PrgRam prg_ram;
     ChrRom chr_rom;
+    uint8_t (*MemMapReadFn[0x10000])(struct Cart *cart, const uint32_t addr);
+    void (*MemMapWriteFn[0x10000])(struct Cart *cart, const uint32_t addr, const uint8_t data);
     int mapper_num;
     int arrangement;
     const char *name;
     bool battery;
-    uint8_t (*PrgReadFn)(struct Cart *cart, const uint16_t addr);
-    uint8_t (*ChrReadFn)(struct Cart *cart, const uint16_t addr);
-    void (*PrgWriteFn)(struct Cart *cart, const uint16_t addr, const uint8_t data);
-    void (*ChrWriteFn)(struct Cart *cart, const uint16_t addr, const uint8_t data);
-    void (*RegWriteFn)(const uint16_t addr, const uint8_t data);
-    uint8_t (*RegReadFn)(const uint16_t addr);
+    uint8_t (*ChrReadFn)(struct Cart *cart, const uint32_t addr);
+    void (*ChrWriteFn)(struct Cart *cart, const uint32_t addr, const uint8_t data);
 } Cart;
 
 #define CART_RAM_SIZE 0x2000

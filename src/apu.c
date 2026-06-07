@@ -496,7 +496,7 @@ void ApuDmcDmaUpdate(Apu *apu)
     }
 }
 
-void WriteAPURegister(Apu *apu, const uint16_t addr, const uint8_t data)
+void ApuWriteReg(Apu *apu, const uint16_t addr, const uint8_t data)
 {
     switch (addr)
     {

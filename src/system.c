@@ -49,16 +49,6 @@ uint8_t SystemReadOpenBus(void)
     return system_ptr->bus_data;
 }
 
-static void SystemRamWrite(System *system, const uint16_t addr, const uint8_t data)
-{
-    system->sys_ram[addr & 0x7FF] = data;
-}
-
-static uint8_t SystemRamRead(System *system, const uint16_t addr)
-{
-    return system->sys_ram[addr & 0x7FF];
-}
-
 static bool ApuRegsActivated(System *system)
 {
     return system->cpu_addr >= 0x4000 && system->cpu_addr < 0x4020;
@@ -167,57 +157,6 @@ void SystemSignalDmcDma(void)
     system_ptr->dmc_dma_triggered = true;
 }
 
-static uint8_t SystemMemMappedRead(System *system, MemOperation op, const uint16_t addr)
-{
-    switch (op)
-    {
-        case MEM_PRG_READ:
-            return MapperReadPrgRom(system->cart, addr);
-        case MEM_REG_READ:
-            return MapperReadReg(system->cart, addr);
-        case MEM_SWRAM_READ:
-            return CartReadPrgRam(system->cart, addr);
-        default:
-            return 0;
-    }
-}
-
-static void SystemMemMappedWrite(System *system, MemOperation op, const uint16_t addr, uint8_t data)
-{
-    switch (op)
-    {
-        case MEM_REG_WRITE:
-            MapperWriteReg(system->cart, addr, data);
-            break;
-        case MEM_SWRAM_WRITE:
-            CartWritePrgRam(system->cart, addr, data);
-            break;
-        case MEM_PRG_WRITE:
-            MapperWritePrgRam(system->cart, addr, data);
-            break;
-        default:
-            break;
-    }
-}
-
-void SystemAddMemMapRead(const uint16_t start_addr, const uint16_t end_addr, MemOperation op)
-{
-    System *system = system_ptr;
-    MemMap *mem_map = &system->mem_map_r[system->mem_maps_r++];
-    mem_map->start_addr = start_addr;
-    mem_map->end_addr = end_addr;
-    mem_map->op = op;
-}
-
-void SystemAddMemMapWrite(const uint16_t start_addr, const uint16_t end_addr, MemOperation op)
-{
-    System *system = system_ptr;
-    MemMap *mem_map = &system->mem_map_w[system->mem_maps_w++];
-    mem_map->start_addr = start_addr;
-    mem_map->end_addr = end_addr;
-    mem_map->op = op;
-}
-
 static void SystemHandleDMA(System *system)
 {
     if (!system->dma_pending)
@@ -261,6 +200,7 @@ uint8_t BusRead(const uint16_t addr)
             system->bus_data &= 0xE0;
             // Update bits 0–4
             system->bus_data |= (ReadJoyPadReg(system->joy_pad1) & 0x1F);
+            return system->bus_data;
         }
         else if (val == 0x17)
         {
@@ -268,6 +208,7 @@ uint8_t BusRead(const uint16_t addr)
             system->bus_data &= 0xE0;
             // Update bits 0–4
             system->bus_data |= (ReadJoyPadReg(system->joy_pad2) & 0x1F);
+            return system->bus_data;
         }
         //else if (addr >= 0x4000 && addr < 0x6000)
         //{
@@ -275,32 +216,7 @@ uint8_t BusRead(const uint16_t addr)
         //}
     }
 
-    switch (addr >> 13)
-    {
-        // $0000 - $1FFF
-        case 0x0:
-            system->bus_data = SystemRamRead(system, addr);
-            break;
-
-        // $2000 - $3FFF
-        case 0x1:
-            system->bus_data = PpuReadReg(system->ppu, addr);
-            break;
-        default:
-        {
-            for (int i = 0; i < system->mem_maps_r; i++)
-            {
-                MemMap *mem_map = &system->mem_map_r[i];
-            
-                if (addr >= mem_map->start_addr && addr <= mem_map->end_addr)
-                {
-                    system->bus_data = SystemMemMappedRead(system, mem_map->op, addr);
-                }
-            }
-            break;
-        }
-    }
-
+    system->bus_data = system->cart->MemMapReadFn[addr](system->cart, addr);
     // Finally read the data from the bus
     return system->bus_data;
 }
@@ -317,52 +233,13 @@ void BusWrite(const uint16_t addr, const uint8_t data)
     System *system = system_ptr;
     ++system->cpu->cycles;
 
-    switch (addr >> 13)
-    {
-        // $0000 - $1FFF
-        case 0x0:
-            // Internal RAM (mirrored)
-            SystemRamWrite(system, addr, data);
-            break;
-
-        // $2000 - $3FFF
-        case 0x1:
-            PpuWriteReg(system->ppu, addr, data);
-            break;
-
-        // $4000 - $5FFF
-        case 0x2:
-        {
-            if (addr == 0x4014)
-            {
-                DEBUG_LOG("Requested OAM DMA 0x%04X\n", addr);
-                system->oam_dma_triggered = true;
-                system->dma_pending = true;
-            }
-            else if (addr == 0x4016)
-            {
-                WriteJoyPadReg(system->joy_pad1, data);
-                WriteJoyPadReg(system->joy_pad2, data);
-            }
-            else if (addr < 0x4018)
-            {
-                WriteAPURegister(system->apu, addr, data);
-            }
-            break;
-        }
-    }
-
-    for (int i = 0; i < system->mem_maps_w; i++)
-    {
-        MemMap *mem_map = &system->mem_map_w[i];
-
-        if (addr >= mem_map->start_addr && addr <= mem_map->end_addr)
-        {
-            SystemMemMappedWrite(system, mem_map->op, addr, data);
-        }
-    }
-
+    system->cart->MemMapWriteFn[addr](system->cart, addr, data);
     system->bus_data = data;
+}
+
+System *SystemGetPtr(void)
+{
+    return system_ptr;
 }
 
 Cart *SystemGetCart(void)

@@ -23,8 +23,6 @@ typedef enum
 
 typedef struct System
 {
-    MemMap mem_map_r[5];
-    MemMap mem_map_w[5];
     Cpu *cpu;
     Apu *apu;
     Ppu *ppu;
@@ -57,9 +55,6 @@ void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cy
                 int sample_rate, uint32_t **buffers, const uint32_t buffer_size);
 void SystemRun(System *system, bool debug_info);
 void SystemUpdateState(System *system, SystemState state);
-void SystemAddMemMap(const uint16_t start_addr, const uint16_t end_addr, MemOperation op, MemPermissions perms);
-void SystemAddMemMapRead(const uint16_t start_addr, const uint16_t end_addr, MemOperation op);
-void SystemAddMemMapWrite(const uint16_t start_addr, const uint16_t end_addr, MemOperation op);
 void SystemTick(void);
 bool SystemPollAllIrqs(void);
 void SystemReset(System *system);
@@ -85,6 +80,7 @@ uint8_t ExtNameTableRead(Ppu *ppu, const uint16_t addr);
 void SystemAddCpuCycles(uint32_t cycles);
 void SystemUpdateJPButtons(System *system, const bool *buttons);
 
+System *SystemGetPtr(void);
 Cart *SystemGetCart(void);
 Apu *SystemGetApu(void);
 Ppu *SystemGetPpu(void);
