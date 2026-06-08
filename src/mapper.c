@@ -1494,7 +1494,7 @@ bool PollMapperIrq(void)
 static void MapperAddMemMapRead(Cart *cart, uint8_t (*MemMapReadFn)(struct Cart *cart, const uint32_t addr),
                                 const uint16_t start_addr, const uint16_t end_addr)
 {
-    for (uint16_t addr = start_addr; addr <= end_addr; addr++)
+    for (uint32_t addr = start_addr; addr <= end_addr; addr++)
     {
         cart->MemMapReadFn[addr] = MemMapReadFn;
     }
@@ -1503,7 +1503,7 @@ static void MapperAddMemMapRead(Cart *cart, uint8_t (*MemMapReadFn)(struct Cart 
 static void MapperAddMemMapWrite(Cart *cart, void (*MemMapWriteFn)(struct Cart *cart, const uint32_t addr, const uint8_t data),
                                 const uint16_t start_addr, const uint16_t end_addr)
 {
-    for (uint16_t addr = start_addr; addr <= end_addr; addr++)
+    for (uint32_t addr = start_addr; addr <= end_addr; addr++)
     {
         cart->MemMapWriteFn[addr] = MemMapWriteFn;
     }
