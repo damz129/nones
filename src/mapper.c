@@ -45,13 +45,13 @@ static void OpenBusWrite(Cart *cart, const uint32_t addr, const uint8_t data)
 static void SystemRamWrite(Cart *cart, const uint32_t addr, const uint8_t data)
 {
     UNUSED(cart);
-    SystemGetPtr()->sys_ram[addr & 0x7FF] = data;
+    SystemGetCpu()->sys_ram[addr & 0x7FF] = data;
 }
 
 static uint8_t SystemRamRead(Cart *cart, const uint32_t addr)
 {
     UNUSED(cart);
-    return SystemGetPtr()->sys_ram[addr & 0x7FF];
+    return SystemGetCpu()->sys_ram[addr & 0x7FF];
 }
 
 static uint8_t MapperReadPpuReg(Cart *cart, const uint32_t addr)

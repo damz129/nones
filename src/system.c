@@ -19,13 +19,12 @@ static System *system_ptr = NULL;
 System *SystemCreate(Arena *arena)
 {
     System *system = ArenaPush(arena, sizeof(System));
+    system->cart = ArenaPush(arena, sizeof(Cart));
     system->cpu = ArenaPush(arena, sizeof(Cpu));
     system->apu = ArenaPush(arena, sizeof(Apu));
     system->ppu = ArenaPush(arena, sizeof(Ppu));
-    system->cart = ArenaPush(arena, sizeof(Cart));
     system->joy_pad1 = ArenaPush(arena, sizeof(JoyPad));
     system->joy_pad2 = ArenaPush(arena, sizeof(JoyPad));
-    system->sys_ram = ArenaPush(arena, CPU_RAM_SIZE);
 
     system_ptr = system;
     return system;

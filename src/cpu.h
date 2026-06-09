@@ -50,6 +50,7 @@ typedef union
 
 typedef struct
 {
+    uint8_t sys_ram[0x800];
     char debug_msg[128];
     int64_t cycles;
     uint16_t pc;

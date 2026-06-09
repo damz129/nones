@@ -23,23 +23,16 @@ typedef enum
 
 typedef struct System
 {
+    Cart *cart;
     Cpu *cpu;
     Apu *apu;
     Ppu *ppu;
 
-    Cart *cart;
     JoyPad *joy_pad1;
     JoyPad *joy_pad2;
-    uint8_t *sys_ram;
     SystemState state;
-    int mem_maps_r;
-    int mem_maps_w;
     int oam_dma_bytes_remaining;
-
     uint16_t cpu_addr;
-    //uint16_t oam_addr;
-    //uint16_t dmc_addr;
-    //uint16_t addr_bus;
 
     bool oam_dma_triggered;
     bool dmc_dma_triggered;
@@ -47,8 +40,6 @@ typedef struct System
 
     uint8_t bus_data;
 } System;
-
-#define CPU_RAM_SIZE 0x800
 
 System *SystemCreate(Arena *arena);
 void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cycles,
