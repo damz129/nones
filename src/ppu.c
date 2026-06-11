@@ -1045,7 +1045,7 @@ void PPU_Tick(Ppu *ppu)
 
         if (ppu->rendering)
         {
-            if (ppu->cycle_counter && (ppu->cycle_counter <= 257 || (ppu->cycle_counter >= 321 && ppu->cycle_counter <= 336)))
+            if (ppu->cycle_counter && (ppu->cycle_counter <= 256 || (ppu->cycle_counter >= 321 && ppu->cycle_counter <= 336)))
                 PpuFetchBG(ppu);
 
             if (ppu->cycle_counter == 64 && ppu->scanline != 261)
