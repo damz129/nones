@@ -392,11 +392,7 @@ static inline uint8_t PpuReadData(Ppu *ppu)
     }
     else
     {
-        const uint16_t prev_a12 = ppu->v.raw_bits.bit12;
-        // Auto-increment address
-        ppu->v.raw += ppu->ctrl.vram_addr_inc ? 32 : 1;
-        if (~prev_a12 & ppu->v.raw_bits.bit12)
-            PpuClockMMC3();
+        ppu->delayed_vram_inc += ppu->ctrl.vram_addr_inc ? 32 : 1;
     }
 
     return data;
