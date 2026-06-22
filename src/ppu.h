@@ -301,7 +301,6 @@ typedef struct
     ShiftReg attrib_shift_high;
 
     uint16_t copy_t_delay;
-    uint16_t delayed_vram_inc;
 
     // Per scanline
     int found_sprites;
@@ -317,6 +316,7 @@ typedef struct
     bool frame_finished;
     bool skipped_cycle;
     bool copy_t;
+    bool vram_update;
 
     // External io regs for cpu
     PpuCtrl ctrl;

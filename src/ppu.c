@@ -303,15 +303,7 @@ void PpuWriteData(Ppu *ppu, const uint8_t data)
     // Outside of rendering, reads from or writes to $2007 will add either 1 or 32 to v depending on the VRAM increment bit set via $2000.
     // During rendering (on the pre-render line and the visible lines 0-239, provided either background or sprite rendering is enabled),
     // it will update v in an odd way, triggering a coarse X increment and a Y increment simultaneously (with normal wrapping behavior).
-    if (ppu->rendering && (ppu->scanline < 240 || ppu->scanline == 261))
-    {
-        PpuIncrementScrollX(ppu);
-        PpuIncrementScrollY(ppu);
-    }
-    else
-    {
-        ppu->delayed_vram_inc += ppu->ctrl.vram_addr_inc ? 32 : 1;
-    }
+    ppu->vram_update = true;
 }
 
 static inline void PpuWriteScroll(Ppu *ppu, const uint8_t value)
@@ -385,15 +377,7 @@ static inline uint8_t PpuReadData(Ppu *ppu)
         }
     }
 
-    if (ppu->rendering && (ppu->scanline < 240 || ppu->scanline == 261))
-    {
-        PpuIncrementScrollX(ppu);
-        PpuIncrementScrollY(ppu);
-    }
-    else
-    {
-        ppu->delayed_vram_inc += ppu->ctrl.vram_addr_inc ? 32 : 1;
-    }
+    ppu->vram_update = true;
 
     return data;
 }
@@ -966,6 +950,37 @@ static inline void PpuFetchSpritesFast(Ppu *ppu)
     }
 }
 
+static inline void PpuVramAddrUpdate(Ppu *ppu)
+{
+    if (ppu->copy_t)
+    {
+        if (!(ppu->copy_t_delay--))
+        {
+            PpuCopyTtoV(ppu);
+        }
+    }
+
+    // VRAM addr (V) increments are delayed one dot/cycle for $2007(PPUDATA)
+    if (ppu->vram_update)
+    {
+        if (ppu->rendering && (ppu->scanline < 240 || ppu->scanline == 261))
+        {
+            PpuIncrementScrollX(ppu);
+            PpuIncrementScrollY(ppu);
+        }
+        else
+        {
+            const uint8_t prev_a12 = ppu->v.raw_bits.bit12;
+            ppu->v.raw += ppu->ctrl.vram_addr_inc ? 32 : 1;
+            if (~prev_a12 & ppu->v.raw_bits.bit12)
+                PpuClockMMC3();
+        }
+
+        ppu->vram_update = false;
+    }
+}
+
+
 static inline void PpuRenderPixel(Ppu *ppu)
 {
     if (!ppu->cycle_counter || (ppu->scanline == 261 || ppu->cycle_counter > 256))
@@ -1142,25 +1157,8 @@ void PPU_Tick(Ppu *ppu)
         ppu->clear_vblank = false;
     }
 
-    // VRAM addr (V) increments are delayed one dot/cycle for $2007(PPUDATA) writes
-    if (ppu->delayed_vram_inc)
-    {
-        const uint8_t prev_a12 = ppu->v.raw_bits.bit12;
-        ppu->v.raw += ppu->delayed_vram_inc;
-        ppu->delayed_vram_inc = 0;
-        if (~prev_a12 & ppu->v.raw_bits.bit12)
-            PpuClockMMC3();
-    }
-
-    if (ppu->copy_t)
-    {
-        if (!(ppu->copy_t_delay--))
-        {
-            PpuCopyTtoV(ppu);
-        }
-    }
-
     PpuUpdateRenderingState(ppu);
+    PpuVramAddrUpdate(ppu);
     PpuCycleUpdate(ppu);
 }
 
