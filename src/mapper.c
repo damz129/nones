@@ -740,6 +740,7 @@ static void Mmc1RegWrite(Cart *cart, const uint32_t addr, const uint8_t data)
         // Set last bank at $C000 and switch 16 KB bank at $8000
         mmc1.control.prg_rom_bank_mode = 0x3;
         mmc1.consec_write = true;
+        Mmc1UpdateChrBankInfo();
         return;
     }
 
