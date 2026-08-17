@@ -19,7 +19,8 @@
 static soxr_t soxr;
 static soxr_error_t error;
 
-//#define APU_FAST_MIXER
+static float pulse_lut[31];
+static float tnd_lut[203];
 
 static const SequenceStep sequence_table[2][6] =
 {
@@ -104,8 +105,6 @@ bool PollApuIrqs(Apu *apu)
 {
     return apu->status.dmc_irq | (apu->status.frame_irq & ~apu->frame_ctr.ctrl.irq_inhibit);
 }
-
-#define FCPU 1789773.0
 
 static void ApuWritePulse1Duty(Apu *apu, const uint8_t data)
 {
@@ -674,14 +673,9 @@ static float ApplyFilter(float sample, float prev_sample, float alpha)
 
 static void ApuMixSample(Apu *apu)
 {
-#ifdef APU_FAST_MIXER
-    float pulse = 0.00752f * (apu->pulse1.output + apu->pulse2.output);
-    float tnd_out = 0.00851f * apu->triangle.output + 0.00494f * apu->noise.output + 0.00335f * apu->dmc.output_level;
-#else
-    float pulse = 95.88 / ((8128.0 / (apu->pulse1.output + apu->pulse2.output)) + 100);
-    float tnd = 1 / ((apu->triangle.output / 8227.0) + (apu->noise.output / 12241.0) + (apu->dmc.output_level / 22638.0));
-    float tnd_out = 159.79 / (tnd + 100);
-#endif
+    float pulse = pulse_lut[apu->pulse1.output + apu->pulse2.output];
+    float tnd_out = tnd_lut[3 * apu->triangle.output + 2 * apu->noise.output + apu->dmc.output_level];
+
     float raw_sample = pulse + tnd_out + MapperGetMixedAudio();
     // Apply a HPF to fix the the DC offset without affecting the FR too much
     apu->mixer.hpf_sample = ApplyFilter(raw_sample, apu->mixer.hpf_sample, apu->mixer.hpf_alpha);
@@ -813,6 +807,16 @@ void APU_Init(Apu *apu, Arena *arena, const bool swap_duty_cycles, int sample_ra
     apu->dmc.empty = true;
     apu->alignment = 0;
     apu->swap_duty_cycles = swap_duty_cycles;
+
+    for (int i = 0; i < 31; i++)
+    {
+        pulse_lut[i] = 95.52 / (8128.0 / i + 100);
+    }
+
+    for (int i = 0; i < 203; i++)
+    {
+        tnd_lut[i] = 163.67 / (24329.0 / i + 100);
+    }
 
     soxr_quality_spec_t q_spec = soxr_quality_spec(SOXR_HQ, SOXR_VR);
     soxr_io_spec_t io_spec = soxr_io_spec(SOXR_FLOAT32_I, SOXR_INT16_I);
