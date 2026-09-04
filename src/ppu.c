@@ -9,7 +9,6 @@
 #include <SDL3/SDL.h>
 
 #include "arena.h"
-#include "apu.h"
 #include "ppu.h"
 #include "cpu.h"
 #include "joypad.h"
