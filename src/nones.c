@@ -12,18 +12,6 @@
 #include "cart.h"
 #include "nones.h"
 
-static SDL_AudioStream *stream = NULL;
-
-void NonesPutSoundData(int16_t *buffer, const int buffer_size)
-{
-    // SDL buffer size is 5x the size of the sample buffer
-    const int minimum_audio = (5 * buffer_size);
-    if (SDL_GetAudioStreamQueued(stream) < minimum_audio)
-    {
-        SDL_PutAudioStreamData(stream, buffer, buffer_size);
-    }
-}
-
 static void NonesDrawDebugInfo(Nones *nones, NonesInfo *info)
 {
     if (!nones->debug_info)
@@ -160,7 +148,7 @@ static void NonesHandleInput(Nones *nones)
         NonesSetIntegerScale(nones, 5);
 }
 
-static void NonesInit(Nones *nones, const char *path, const char *audio_driver, const int sample_rate, const int aspect_ratio, const bool fullscreen)
+static void NonesInit(Nones *nones, const char *path, const int aspect_ratio, const bool fullscreen)
 {
     memset(nones, 0, sizeof(*nones));
     nones->arena = ArenaCreate(1024 * 1024 * 5);
@@ -175,19 +163,12 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
         exit(EXIT_FAILURE);
     }
 
-    if (audio_driver != NULL)
-    {
-        SDL_SetHint(SDL_HINT_AUDIO_DRIVER, audio_driver);
-    }
-
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD))
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
     {
         SDL_Log("SDL Init Error: %s", SDL_GetError());
         ArenaDestroy(nones->arena);
         exit(EXIT_FAILURE);
     }
-
-    SDL_Log("SDL audio driver: %s\n", SDL_GetCurrentAudioDriver());
 
     nones->window = SDL_CreateWindow("nones", screen_width * 2, SCREEN_HEIGHT * 2, 0);
     if (!nones->window)
@@ -245,24 +226,6 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
         SDL_Log("No gamepad detected! SDL error: %s\n", SDL_GetError());
     }
 
-    SDL_AudioSpec spec;
-    spec.channels = 1;
-    spec.format = SDL_AUDIO_S16;
-    spec.freq = sample_rate;
-
-    stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
-    if (!stream)
-    {
-        SDL_Log("Couldn't create audio stream: %s", SDL_GetError());
-        SDL_DestroyRenderer(nones->renderer);
-        SDL_DestroyWindow(nones->window);
-        SDL_Quit();
-        ArenaDestroy(nones->arena);
-        exit(EXIT_FAILURE);
-    }
-
-    SDL_ResumeAudioStreamDevice(stream);
-
     nones->texture = SDL_CreateTexture(nones->renderer,
         SDL_PIXELFORMAT_RGBA8888,
         SDL_TEXTUREACCESS_STREAMING,
@@ -291,7 +254,6 @@ static void NonesShutdown(Nones *nones)
         SDL_CloseGamepad(nones->gamepad1);
     if (nones->gamepad2)
         SDL_CloseGamepad(nones->gamepad2);
-    SDL_DestroyAudioStream(stream);
     SDL_DestroyWindow(nones->window);
     SDL_Quit();
 
@@ -304,9 +266,9 @@ static void NonesReset(Nones *nones)
 }
 
 void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_ratio, bool swap_duty_cycles,
-              const int sample_rate, const char *path, const char *audio_driver)
+              const char *path)
 {
-    NonesInit(nones, path, audio_driver, sample_rate, aspect_ratio, fullscreen);
+    NonesInit(nones, path, aspect_ratio, fullscreen);
 
     // Allocate pixel buffers (back and front)
     uint32_t *buffers[2];
@@ -314,7 +276,7 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_r
     buffers[0] = ArenaPush(nones->arena, buffer_size);
     buffers[1] = ArenaPush(nones->arena, buffer_size);
 
-    SystemInit(nones->system,nones->arena, ppu_warmup, swap_duty_cycles, sample_rate, buffers, buffer_size);
+    SystemInit(nones->system,nones->arena, ppu_warmup, swap_duty_cycles, buffers, buffer_size);
     SDL_Event event;
     void *raw_pixels;
     int raw_pitch;
