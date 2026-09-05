@@ -1,8 +1,43 @@
 #ifdef DISABLE_APU
 #include <stdint.h>
+#include <stdbool.h>
+#include "arena.h"
 #include "apu.h"
+
 void ApuWriteReg(Apu *apu, const uint16_t addr, const uint8_t data) {
-    (void)apu; (void)addr; (void)data;
+    (void)apu; (void)addr; (void)data; 
+}
+
+bool PollApuIrqs(Apu *apu) { 
+    (void)apu;
+    return false; 
+}
+
+uint8_t ApuReadStatus(Apu *apu, const uint8_t bus_data) {
+    (void)apu;
+    return bus_data; 
+}
+
+void ApuDmcDmaUpdate(Apu *apu) {
+    (void)apu; 
+}
+
+void APU_Tick(Apu *apu, bool put_cycle) {
+    (void)apu; (void)put_cycle; 
+}
+
+void APU_Init(Apu *apu, Arena *arena, const bool swap_duty_cycles, int sample_rate) {
+    (void)apu; (void)arena; (void)swap_duty_cycles; (void)sample_rate;
+}
+
+void APU_Reset(Apu *apu) { 
+    (void)apu; 
+}
+
+void APU_Shutdown(Apu *apu) { 
+    (void)apu; 
+}
+
 #else
 #include <stdio.h>
 #include <stdlib.h>
