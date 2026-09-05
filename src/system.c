@@ -8,10 +8,7 @@
 
 #include "arena.h"
 
-#ifndef DISABLE_APU
 #include "apu.h"
-#endif
-
 #include "cart.h"
 #include "system.h"
 #include "mapper.h"
