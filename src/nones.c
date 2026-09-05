@@ -388,20 +388,17 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_r
     buffers[0] = ArenaPush(nones->arena, buffer_size);
     buffers[1] = ArenaPush(nones->arena, buffer_size);
 
-    SystemInit(nones->system,nones->arena, ppu_warmup, swap_duty_cycles, sample_rate, buffers, buffer_size);
 #ifdef FP
-    // ============================================================================
-    // VÒNG LẶP CHẠY GAME SIÊU TỐC CHO ĐIỆN THOẠI CỤC GẠCH (FP)
-    // ============================================================================
+    SystemInit(nones->system, nones->arena, ppu_warmup, swap_duty_cycles, sample_rate, (void*)buffers, buffer_size);
+#else
+    SystemInit(nones->system,nones->arena, ppu_warmup, swap_duty_cycles, sample_rate, buffers, buffer_size);
+#end
+
+#ifdef FP
     while (!nones->quit)
     {
-        // 1. Quét ma trận phím bấm từ bàn phím điện thoại
         NonesHandleInput(nones);
-
-        // 2. Chạy chu kỳ tính toán chỉ thị máy của CPU/PPU NES
         SystemRun(nones->system, nones->debug_info);
-
-        // 3. ĐẨY ĐỒ HỌA LÊN LCD BARE-METAL: Chờ đồng bộ tần số quét phần cứng
         sys_wait_refresh();
         unsigned crop = sys_data.user;
         unsigned h = SCREEN_HEIGHT - crop * 2;
