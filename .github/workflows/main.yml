@@ -1,0 +1,42 @@
+name: Build NoNES Windows (No APU Test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          make
+          mingw-w64-ucrt-x86_64-sdl3
+
+    - name: Clean up old DLL copy lines from Makefile
+      shell: msys2 {0}
+      run: |
+        sed -i '/libsoxr.dll/d' Makefile
+        sed -i '/libgomp-1.dll/d' Makefile
+
+    - name: Compile Emulator Binary
+      shell: msys2 {0}
+      run: |
+        make clean
+        make release
+
+    - name: Upload Compiled Binary Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: nones-windows-no-apu
+        path: |
+          nones.exe
+          SDL3.dll
