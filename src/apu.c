@@ -1,4 +1,7 @@
-#ifndef DISABLE_APU
+#ifdef DISABLE_APU
+void ApuWriteReg(Apu *apu, const uint16_t addr, const uint8_t data) {
+    (void)apu; (void)addr; (void)data;
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
