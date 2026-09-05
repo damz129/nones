@@ -6,7 +6,9 @@
 #include <string.h>
 #include <sys/types.h>
 
+#ifndef FP
 #include <SDL3/SDL.h>
+#endif
 
 #include "arena.h"
 #include "apu.h"
@@ -23,7 +25,11 @@ static uint8_t vram[0x800];
 // Pointers to handle mirroring
 static uint8_t *nametables[4];
 // Filled on PPU Init
+#ifdef FP
+static uint16_t color_lut[64][8];
+#else
 static uint32_t color_lut[64][8];
+#endif
 
 //#define FAST_SPRITE_EVAL
 #define FAST_BG_FETCH
@@ -35,7 +41,7 @@ static const Color sys_palette[64] =
     {0x14, 0x12, 0xA7},
     {0x3B, 0x00, 0xA4}, 
     {0x5C, 0x00, 0x7E},
-    {0x6E, 0x00, 0x40},
+1    {0x6E, 0x00, 0x40},
     {0x6C, 0x07, 0x00},
     {0x56, 0x1D, 0x00},
     {0x33, 0x35, 0x00},
@@ -96,7 +102,11 @@ static const Color sys_palette[64] =
     {0x00, 0x00, 0x00}
 };
 
+#ifdef FP
+static inline uint16_t GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+#else
 static inline uint32_t GetBGColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+#endif
 {
     // Compute palette memory address
     const uint16_t palette_addr = 0x3F00 | (palette_index << 2) | pixel;
@@ -126,7 +136,11 @@ static inline uint32_t GetBGColor(Ppu *ppu, const uint8_t palette_index, const u
     return color_lut[color_index & 0x3F][ppu->mask.raw >> 5];
 }
 
+ifdef FP
+static inline uint16_t GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+#else
 static inline uint32_t GetSpriteColor(Ppu *ppu, const uint8_t palette_index, const uint8_t pixel)
+#endif
 {
     const uint16_t palette_addr = 0x10 | (palette_index << 2) | pixel;
     uint16_t color_index = ppu->palettes[palette_addr & 0x1F];
@@ -563,8 +577,14 @@ static inline void PpuApplyColorEmphasis(Color *src_color, Color *dst_color, con
             break;
     }
 }
-
-void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const uint32_t buffer_size)
+extern uint16_t NesPalette[];
+void PPU_Init(Ppu *ppu, int arrangement, bool warmup,
+#ifdef FP
+              uint16_t **buffers,
+#else
+              uint32_t **buffers,
+#endif
+              const uint32_t buffer_size)
 {
     memset(ppu, 0, sizeof(*ppu));
     ppu->arrangement = arrangement;
@@ -577,6 +597,18 @@ void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const 
     ppu->copy_t_delay = 2;
     ppu->warmup = warmup;
 
+#ifdef FP
+    // ĐÃ SỬA: Nếu build cho điện thoại, nạp thẳng mã màu 16-bit từ mảng NesPalette phần cứng
+    for (int i = 0; i < 64; i++)
+    {
+        uint16_t hardware_color = NesPalette[i];
+        for (int j = 0; j < 8; j++)
+        {
+            color_lut[i][j] = hardware_color;
+        }
+    }
+#else
+    
     for (int i = 0; i < 64; i++)
     {
         Color color = sys_palette[i];
@@ -589,9 +621,14 @@ void PPU_Init(Ppu *ppu, int arrangement, bool warmup, uint32_t **buffers, const 
             color_lut[i][j] = (uint32_t)((color_emph.r << 24) | (color_emph.g << 16) | (color_emph.b << 8) | 255);
         }
     }
+#endif
 }
 
+#ifdef FP
+static inline void DrawPixel(uint16_t *buffer, int x, int y, const uint16_t packed_color)
+#else
 static inline void DrawPixel(uint32_t *buffer, int x, int y, const uint32_t packed_color)
+#endif
 {
     if (__builtin_expect(x < 0 || y < 0 || x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT, 0))
         return;
