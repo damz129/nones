@@ -6,11 +6,37 @@
 #include "stdbool.h"
 #include <stdalign.h>
 
+#ifndef FP
 #include <SDL3/SDL.h>
+#endif
 
 #include "system.h"
 #include "cart.h"
 #include "nones.h"
+
+#ifdef FP
+typedef void (*scr_update_t)(void *src, uint16_t *dst, unsigned h);
+extern const scr_update_t scr_update_fn[];
+extern uint16_t *framebuf;
+extern uint16_t NesPalette[];
+
+static unsigned timerlast, timertick, timertick_ms;
+#define FRAMERATE 60
+#define TIMER_MUL (((1000 << 12) + FRAMERATE - 1) / FRAMERATE)
+
+static void fp_wait_frame(void) {
+    unsigned t0 = timertick, t1, t2;
+    t2 = 1;
+    do t0 += TIMER_MUL; while (--t2);
+    t2 = t0 >> 12;
+    t1 = t2 - timertick_ms;
+    if (t2 >= 1000) t0 -= TIMER_MUL * 60, t2 -= 1000;
+    timertick = t0; timertick_ms = t2;
+    t1 += timerlast; timerlast = t1;
+    t0 = sys_timer_ms(); t1 -= t0;
+    if ((int)t1 > 0 && t1 > 500 / 60) sys_wait_ms(t1);
+}
+#endif
 
 static SDL_AudioStream *stream = NULL;
 
@@ -104,6 +130,34 @@ static void NonesUpdateJoyStick(Nones *nones, SDL_Joystick *joystick, bool playe
 
 static void NonesHandleInput(Nones *nones)
 {
+#ifdef FP
+
+    uint32_t keys = sys_getkey_states(); 
+    static uint32_t reset_hold = 0, exit_hold = 0;
+    uint32_t cur_time = sys_timer_ms();
+
+    if (keys & (1 << 1)) { // KEY_RESET = 1
+        if (!reset_hold) reset_hold = cur_time;
+        else if (cur_time - reset_hold >= 1000) { NonesReset(nones); reset_hold = 0; }
+    } else reset_hold = 0;
+
+    if (keys & (1 << 2)) { // KEY_EXIT = 2
+        if (!exit_hold) exit_hold = cur_time;
+        else if (cur_time - exit_hold >= 1000) { nones->quit = true; exit_hold = 0; }
+    } else exit_hold = 0;
+    
+    memset(nones->buttons, 0, sizeof(nones->buttons));
+    nones->buttons[0] = (keys & (1 << 8)) != 0;  // KEY_A = 8
+    nones->buttons[1] = (keys & (1 << 9)) != 0;  // KEY_B = 9
+    nones->buttons[2] = (keys & (1 << 11)) != 0; // KEY_UP = 11
+    nones->buttons[3] = (keys & (1 << 12)) != 0; // KEY_DOWN = 12
+    nones->buttons[4] = (keys & (1 << 13)) != 0; // KEY_LEFT = 13
+    nones->buttons[5] = (keys & (1 << 14)) != 0; // KEY_RIGHT = 14
+    nones->buttons[6] = (keys & (1 << 10)) != 0; // KEY_START = 10
+    nones->buttons[7] = (keys & (1 << 7)) != 0;  // KEY_SELECT = 7
+
+    SystemUpdateJPButtons(nones->system, nones->buttons);
+#else
     const bool *kb_state  = SDL_GetKeyboardState(NULL);
 
     nones->buttons[0] = kb_state[SDL_SCANCODE_SPACE];
@@ -146,7 +200,7 @@ static void NonesHandleInput(Nones *nones)
     SystemUpdateJPButtons(nones->system, nones->buttons);
 
     nones->quit |= kb_state[SDL_SCANCODE_ESCAPE];
-
+    
     // TODO: This could be just done when polling for events
     if (kb_state[SDL_SCANCODE_1])
         NonesSetIntegerScale(nones, 1);
@@ -158,10 +212,23 @@ static void NonesHandleInput(Nones *nones)
         NonesSetIntegerScale(nones, 4);
     else if (kb_state[SDL_SCANCODE_5])
         NonesSetIntegerScale(nones, 5);
+#endif
 }
 
 static void NonesInit(Nones *nones, const char *path, const char *audio_driver, const int sample_rate, const int aspect_ratio, const bool fullscreen)
 {
+#ifdef FP
+    memset(nones, 0, sizeof(*nones));
+    nones->arena = ArenaCreate(1024 * 1024 * 3);
+    nones->system = SystemCreate(nones->arena);
+    nones->aspect_ratio = aspect_ratio;
+
+    if (SystemLoadCart(nones->arena, nones->system, path)) {
+        ArenaDestroy(nones->arena);
+        exit(EXIT_FAILURE);
+    }
+    timerlast = sys_timer_ms(); timertick = 0; timertick_ms = 0;
+#else
     memset(nones, 0, sizeof(*nones));
     nones->arena = ArenaCreate(1024 * 1024 * 5);
     nones->system = SystemCreate(nones->arena);
@@ -260,7 +327,7 @@ static void NonesInit(Nones *nones, const char *path, const char *audio_driver, 
         ArenaDestroy(nones->arena);
         exit(EXIT_FAILURE);
     }
-
+#endif
     SDL_ResumeAudioStreamDevice(stream);
 
     nones->texture = SDL_CreateTexture(nones->renderer,
@@ -283,6 +350,7 @@ static void NonesShutdown(Nones *nones)
 {
     SystemShutdown(nones->system);
 
+#ifndef FP
     // Handles textures as well, so no need to call SDL_DestroyTexture here
     SDL_DestroyRenderer(nones->renderer);
 
@@ -294,7 +362,8 @@ static void NonesShutdown(Nones *nones)
     SDL_DestroyAudioStream(stream);
     SDL_DestroyWindow(nones->window);
     SDL_Quit();
-
+#
+    
     ArenaDestroy(nones->arena);
 }
 
@@ -309,12 +378,45 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_r
     NonesInit(nones, path, audio_driver, sample_rate, aspect_ratio, fullscreen);
 
     // Allocate pixel buffers (back and front)
+#ifdef FP
+    uint16_t *buffers[2];
+    const uint32_t buffer_size = (SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint16_t));
+#else
     uint32_t *buffers[2];
     const uint32_t buffer_size = (SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
+#endif
     buffers[0] = ArenaPush(nones->arena, buffer_size);
     buffers[1] = ArenaPush(nones->arena, buffer_size);
 
     SystemInit(nones->system,nones->arena, ppu_warmup, swap_duty_cycles, sample_rate, buffers, buffer_size);
+#ifdef FP
+    // ============================================================================
+    // VÒNG LẶP CHẠY GAME SIÊU TỐC CHO ĐIỆN THOẠI CỤC GẠCH (FP)
+    // ============================================================================
+    while (!nones->quit)
+    {
+        // 1. Quét ma trận phím bấm từ bàn phím điện thoại
+        NonesHandleInput(nones);
+
+        // 2. Chạy chu kỳ tính toán chỉ thị máy của CPU/PPU NES
+        SystemRun(nones->system, nones->debug_info);
+
+        // 3. ĐẨY ĐỒ HỌA LÊN LCD BARE-METAL: Chờ đồng bộ tần số quét phần cứng
+        sys_wait_refresh();
+        unsigned crop = sys_data.user;
+        unsigned h = SCREEN_HEIGHT - crop * 2;
+        
+        // Trỏ thẳng địa chỉ mảng 16-bit vào hàm nội suy đồ họa thô của fpdoom
+        uint16_t *src_start = buffers[1] + (crop * SCREEN_WIDTH);
+        scr_update_fn[sys_data.scaler](src_start, framebuf, h);
+        
+        // Phát lệnh quét thanh ghi RAM lên màn hình điện thoại thật
+        sys_start_refresh();
+
+        // 4. Khóa cứng tốc độ ở mức chuẩn 60 FPS chống chạy nhanh tua băng
+        fp_wait_frame();
+    }
+#else
     SDL_Event event;
     void *raw_pixels;
     int raw_pitch;
@@ -396,6 +498,7 @@ void NonesRun(Nones *nones, bool ppu_warmup, bool fullscreen, const int aspect_r
             SDL_DelayNS(FRAME_CAP_NS - frame_time);
         }
     }
+#endif
 
     NonesShutdown(nones);
 }
