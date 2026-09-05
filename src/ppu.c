@@ -41,7 +41,7 @@ static const Color sys_palette[64] =
     {0x14, 0x12, 0xA7},
     {0x3B, 0x00, 0xA4}, 
     {0x5C, 0x00, 0x7E},
-1    {0x6E, 0x00, 0x40},
+    {0x6E, 0x00, 0x40},
     {0x6C, 0x07, 0x00},
     {0x56, 0x1D, 0x00},
     {0x33, 0x35, 0x00},
@@ -1176,7 +1176,11 @@ void PPU_Tick(Ppu *ppu)
         // Vblank starts at scanline 241
         ppu->status.vblank = 1;
         // Copy the finished image in the back buffer to the front buffer
+#ifdef FP
+        memcpy((void*)ppu->buffers[1], (void*)ppu->buffers[0], ppu->buffer_size);
+#else
         memcpy(ppu->buffers[1], ppu->buffers[0], ppu->buffer_size);
+#endif
     }
 
     // Clear VBlank flag at scanline 261, dot 1
