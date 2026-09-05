@@ -7,7 +7,11 @@
 #include <stdbool.h>
 
 #include "arena.h"
+
+#ifndef DISABLE_APU
 #include "apu.h"
+#endif
+
 #include "cart.h"
 #include "system.h"
 #include "mapper.h"
@@ -39,7 +43,9 @@ void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cy
                 int sample_rate, uint32_t **buffers, const uint32_t buffer_size)
 {
     PPU_Init(system->ppu, system->cart->arrangement, ppu_warmup, buffers, buffer_size);
+#ifndef DISABLE_APU
     APU_Init(system->apu, arena, swap_duty_cycles, sample_rate);
+#endif
     CPU_Init(system->cpu);
 }
 
@@ -55,7 +61,12 @@ static bool ApuRegsActivated(System *system)
 
 static bool ExplicitAbortDmcDma(System *system)
 {
+#ifdef DISABLE_APU
+    (void)system;
+    return true;
+#else
     return !system->apu->status.dmc;
+#endif
 }
 
 static void SystemStartOamDma(System *system, const uint8_t page_num)
@@ -79,15 +90,17 @@ static void SystemStartOamDma(System *system, const uint8_t page_num)
 
         SystemTick();
         // OAM DMA uses Ppu reg $2004 (OAM_DATA) internally
-        // Get
         const uint8_t data = BusRead(base_addr++);
         SystemTick();
         // Put
         BusWrite(OAM_DATA_REG, data);
+        
         if (system->dmc_dma_triggered && system->oam_dma_bytes_remaining > 2)
         {
             SystemTick();
+#ifndef DISABLE_APU
             ApuDmcDmaUpdate(system->apu);
+#endif
             system->dmc_dma_triggered = false;
         }
         else if (system->dmc_dma_triggered && system->oam_dma_bytes_remaining == 2)
@@ -111,13 +124,17 @@ static void SystemStartOamDma(System *system, const uint8_t page_num)
         }
 
         SystemTick();
+#ifndef DISABLE_APU
         ApuDmcDmaUpdate(system->apu);
+#endif
         system->dmc_dma_triggered = false;
     }
     else if (system->dmc_dma_triggered && single_dma_cycle)
     {
         SystemTick();
+#ifndef DISABLE_APU
         ApuDmcDmaUpdate(system->apu);
+#endif
         system->dmc_dma_triggered = false;
     }
 }
@@ -146,7 +163,9 @@ static void SystemStartDmcDma(System *system)
     }
 
     SystemTick();
+#ifndef DISABLE_APU
     ApuDmcDmaUpdate(system->apu);
+#endif
     system->dmc_dma_triggered = false;
 }
 
@@ -191,13 +210,17 @@ uint8_t BusRead(const uint16_t addr)
         uint8_t val = addr & 0x1F;
         if (val == 0x15)
         {
+#ifdef DISABLE_APU
+            return 0x00;
+#else
             return ApuReadStatus(system->apu, system->bus_data);
+#endif
         }
         else if (val == 0x16)
         {
             // Clear bits 0–4
             system->bus_data &= 0xE0;
-            // Update bits 0–4
+            // Update bits 0–4 
             system->bus_data |= (ReadJoyPadReg(system->joy_pad1) & 0x1F);
             return system->bus_data;
         }
@@ -205,14 +228,14 @@ uint8_t BusRead(const uint16_t addr)
         {
             // Clear bits 0–4
             system->bus_data &= 0xE0;
+#ifdef DISABLE_APU
+            return system->bus_data;
+#else
             // Update bits 0–4
             system->bus_data |= (ReadJoyPadReg(system->joy_pad2) & 0x1F);
             return system->bus_data;
+#endif
         }
-        //else if (addr >= 0x4000 && addr < 0x6000)
-        //{
-        //    DEBUG_LOG("Open bus read! addr: 0x%04X bus: %X\n", addr, system->bus_data);
-        //}
     }
 
     system->bus_data = system->cart->MemMapReadFn[addr](system->cart, addr);
@@ -236,38 +259,13 @@ void BusWrite(const uint16_t addr, const uint8_t data)
     system->bus_data = data;
 }
 
-System *SystemGetPtr(void)
-{
-    return system_ptr;
-}
+System *SystemGetPtr(void) { return system_ptr; }
+Cart *SystemGetCart(void) { return system_ptr->cart; }
+Apu *SystemGetApu(void) { return system_ptr->apu; }
+Ppu *SystemGetPpu(void) { return system_ptr->ppu; }
+Cpu *SystemGetCpu(void) { return system_ptr->cpu; }
+uint8_t SystemGetPpuA9(void) { return system_ptr->ppu->v.raw_bits.bit9; }
 
-Cart *SystemGetCart(void)
-{
-    return system_ptr->cart;
-}
-
-Apu *SystemGetApu(void)
-{
-    return system_ptr->apu;
-}
-
-Ppu *SystemGetPpu(void)
-{
-    return system_ptr->ppu;
-}
-
-Cpu *SystemGetCpu(void)
-{
-    return system_ptr->cpu;
-}
-
-uint8_t SystemGetPpuA9(void)
-{
-    return system_ptr->ppu->v.raw_bits.bit9;
-}
-
-// TODO: The Ppu struct should have a ptr to the chr rom / chr ram
-// The PPU only exposes the io regs on the main bus, it has its own bus
 uint8_t PpuBusReadChrRom(const uint16_t addr)
 {
     return MapperReadChrRom(system_ptr->cart, addr);
@@ -284,26 +282,34 @@ void PpuBusWriteChrRam(const uint16_t addr, const uint8_t data)
 
 void MapperClockAudioTimers(void)
 {
+#ifndef DISABLE_APU
     if (system_ptr->cart->mapper_num == MAPPER_MMC5)
     {
         Mmc5ClockAudioTimers();
     }
+#endif
 }
 
 void MapperClockAudio(void)
 {
+#ifndef DISABLE_APU
     if (system_ptr->cart->mapper_num == MAPPER_MMC5)
     {
         Mmc5ClockAudio();
     }
+#endif
 }
 
 float MapperGetMixedAudio(void)
 {
+#ifdef DISABLE_APU
+    return 0.0f;
+#else
     if (system_ptr->cart->mapper_num != MAPPER_MMC5)
         return 0;
 
     return Mmc5GetMixedAudio();
+#endif
 }
 
 void PpuClockMMC3(void)
@@ -351,11 +357,13 @@ void SystemRun(System *system, bool debug_info)
 
 bool SystemPollAllIrqs(void)
 {
+#ifdef DISABLE_APU
+    return PollMapperIrq();
+#else
     return PollApuIrqs(system_ptr->apu) || PollMapperIrq();
+#endif
 }
 
-// The PPU pulls /NMI low if and only if both vblank_flag and NMI_output are true.
-// However we can get the same results by doing the opposite.
 static inline uint8_t SystemReadNmiPin(System *system)
 {
     return (system->ppu->ctrl.vblank_nmi & system->ppu->status.vblank);
@@ -370,8 +378,9 @@ static void SystemPollNmi(System *system)
 
 void SystemTick(void)
 {
+#ifndef DISABLE_APU
     APU_Tick(system_ptr->apu, system_ptr->cpu->cycles & 1);
-
+#endif
     PPU_Tick(system_ptr->ppu);
     SystemPollNmi(system_ptr);
     PPU_Tick(system_ptr->ppu);
@@ -408,13 +417,17 @@ void SystemUpdateJPButtons(System *system, const bool *buttons)
 void SystemReset(System *system)
 {
     MapperReset(system->cart);
+#ifndef DISABLE_APU
     APU_Reset(system->apu);
+#endif
     PPU_Reset(system->ppu);
     CPU_Reset(system->cpu);
 }
 
 void SystemShutdown(System *system)
 {
+#ifndef DISABLE_APU
     APU_Shutdown(system->apu);
+#endif
     CartSaveSram(system->cart);
 }
