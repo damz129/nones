@@ -39,4 +39,4 @@ jobs:
         name: nones-windows-no-apu
         path: |
           nones.exe
-          SDL3.dll
+          *.dll
