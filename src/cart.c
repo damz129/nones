@@ -7,9 +7,7 @@
 #include "arena.h"
 #include "cart.h"
 #include "ppu.h"
-#ifndef DISABLE_APU
 #include "apu.h"
-#endif
 #include "mapper.h"
 #include "utils.h"
 
