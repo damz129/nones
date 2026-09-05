@@ -1,3 +1,4 @@
+#ifndef DISABLE_APU
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -839,3 +840,4 @@ void APU_Reset(Apu *apu)
     apu->dmc.sample_length = 1;
     apu->dmc.empty = true;
 }
+#endif
