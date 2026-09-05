@@ -36,10 +36,20 @@ int SystemLoadCart(Arena *arena, System *system, const char *path)
     return CartLoad(arena, system->cart, path);
 }
 
+#ifdef FP
+void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cycles,
+                int sample_rate, void **buffers, const uint32_t buffer_size)
+#else
 void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cycles,
                 int sample_rate, uint32_t **buffers, const uint32_t buffer_size)
+#endif
 {
+#ifdef FP
+    PPU_Init(system->ppu, system->cart->arrangement, ppu_warmup, (void*)buffers, buffer_size);
+#else
     PPU_Init(system->ppu, system->cart->arrangement, ppu_warmup, buffers, buffer_size);
+#endif
+
 #ifndef DISABLE_APU
     APU_Init(system->apu, arena, swap_duty_cycles, sample_rate);
 #endif
