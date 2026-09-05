@@ -46,6 +46,7 @@ all: release
 release: $(REL_BIN)
 ifeq ($(OS_NAME), windows)
 	cp /ucrt64/bin/SDL3.dll .
+	cp /ucrt64/bin/libiconv-2.dll
 #cp /ucrt64/bin/libsoxr.dll .
 #libsoxr uses libgomp... Yuck. Guess we gotta add the rest the required dll's
 #cp /ucrt64/bin/libgomp-1.dll .
