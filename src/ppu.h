@@ -268,7 +268,11 @@ typedef struct
     // Double buffer for SDL
     // buffer 0 is the backbuffer
     // buffer 1 is the frontbuffer
+#ifdef FP
+    uint16_t *buffers[2];
+#else
     uint32_t *buffers[2];
+#endif
     uint32_t buffer_size;
 
     // PPU internel regs
