@@ -42,8 +42,13 @@ typedef struct System
 } System;
 
 System *SystemCreate(Arena *arena);
+#ifdef FP
+void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cycles,
+                int sample_rate, void **buffers, const uint32_t buffer_size);
+#else
 void SystemInit(System *system, Arena *arena, bool ppu_warmup, bool swap_duty_cycles,
                 int sample_rate, uint32_t **buffers, const uint32_t buffer_size);
+#endif
 void SystemRun(System *system, bool debug_info);
 void SystemUpdateState(System *system, SystemState state);
 void SystemTick(void);
